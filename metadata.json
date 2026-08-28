@@ -1,0 +1,6 @@
+{
+  "name": "Daaron Consulta Dental",
+  "description": "Software de gestión odontológica para Daaron Consulta Dental (Linares): presupuestos con tratamientos y precios manuales, recetas médicas en PDF, agenda de citas y control de caja.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

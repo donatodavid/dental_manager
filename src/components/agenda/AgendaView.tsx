@@ -80,19 +80,19 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
   const getStatusBadge = (status: AppointmentStatus) => {
     switch (status) {
       case 'SCHEDULED':
-        return { label: 'Agendada', bg: 'bg-slate-700 text-slate-300 border-slate-600' };
+        return { label: 'Agendada', bg: 'bg-slate-100 text-slate-700 border-slate-200' };
       case 'CONFIRMED':
-        return { label: 'Confirmada', bg: 'bg-blue-500/20 text-blue-300 border-blue-500/40' };
+        return { label: 'Confirmada', bg: 'bg-blue-50 text-blue-700 border-blue-200' };
       case 'WAITING_ROOM':
-        return { label: 'En Sala de Espera', bg: 'bg-amber-500/20 text-amber-300 border-amber-500/40 animate-pulse' };
+        return { label: 'En Sala de Espera', bg: 'bg-amber-50 text-amber-800 border-amber-200 animate-pulse' };
       case 'IN_TREATMENT':
-        return { label: 'En Atención (Box)', bg: 'bg-teal-500/20 text-teal-300 border-teal-500/40 font-bold animate-pulse' };
+        return { label: 'En Atención (Box)', bg: 'bg-emerald-50 text-emerald-800 border-emerald-200 font-bold animate-pulse' };
       case 'COMPLETED':
-        return { label: 'Atendido / Listo', bg: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40' };
+        return { label: 'Atendido / Listo', bg: 'bg-emerald-100 text-emerald-900 border-emerald-300' };
       case 'CANCELLED':
-        return { label: 'Cancelada', bg: 'bg-red-500/20 text-red-300 border-red-500/40' };
+        return { label: 'Cancelada', bg: 'bg-red-50 text-red-700 border-red-200' };
       case 'NO_SHOW':
-        return { label: 'No Asistió', bg: 'bg-rose-950 text-rose-300 border-rose-800' };
+        return { label: 'No Asistió', bg: 'bg-rose-100 text-rose-800 border-rose-200' };
     }
   };
 
@@ -117,13 +117,13 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
   };
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-6 font-sans">
       
       {/* Top Agenda Header Controls */}
-      <div className="bg-slate-800/80 p-5 rounded-2xl border border-slate-700 flex flex-wrap items-center justify-between gap-4">
+      <div className="bg-white p-5 rounded-3xl border border-slate-200/90 shadow-sm flex flex-wrap items-center justify-between gap-4">
         
         {/* Date Selector with Previous/Next buttons */}
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
           <button
             type="button"
             onClick={() => {
@@ -131,18 +131,18 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
               d.setDate(d.getDate() - 1);
               setSelectedDate(d.toISOString().split('T')[0]);
             }}
-            className="p-2 bg-slate-900 hover:bg-slate-700 rounded-xl text-slate-300 border border-slate-700 transition-all"
+            className="p-2 bg-slate-50 hover:bg-slate-100 rounded-full text-slate-700 border border-slate-200 transition-all"
           >
-            <ChevronLeft className="w-5 h-5" />
+            <ChevronLeft className="w-4 h-4" />
           </button>
 
-          <div className="flex items-center gap-2 bg-slate-900 px-4 py-2 rounded-xl border border-slate-700">
-            <CalendarIcon className="w-4 h-4 text-teal-400" />
+          <div className="flex items-center gap-2 bg-slate-50/90 px-4 py-2 rounded-full border border-slate-200">
+            <CalendarIcon className="w-4 h-4 text-blue-600" />
             <input
               type="date"
               value={selectedDate}
               onChange={(e) => setSelectedDate(e.target.value)}
-              className="bg-transparent text-sm font-bold text-slate-100 focus:outline-none cursor-pointer"
+              className="bg-transparent text-xs font-bold text-slate-800 focus:outline-none cursor-pointer"
             />
           </div>
 
@@ -153,17 +153,17 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
               d.setDate(d.getDate() + 1);
               setSelectedDate(d.toISOString().split('T')[0]);
             }}
-            className="p-2 bg-slate-900 hover:bg-slate-700 rounded-xl text-slate-300 border border-slate-700 transition-all"
+            className="p-2 bg-slate-50 hover:bg-slate-100 rounded-full text-slate-700 border border-slate-200 transition-all"
           >
-            <ChevronRight className="w-5 h-5" />
+            <ChevronRight className="w-4 h-4" />
           </button>
 
           <button
             type="button"
             onClick={() => setSelectedDate('2026-08-28')}
-            className="px-3 py-2 bg-teal-500/10 hover:bg-teal-500/20 text-teal-300 text-xs font-semibold rounded-xl border border-teal-500/30 transition-all"
+            className="px-3.5 py-2 bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-bold rounded-full border border-blue-200 transition-all"
           >
-            Hoy (28 Ago)
+            Hoy
           </button>
         </div>
 
@@ -172,7 +172,7 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
           <select
             value={selectedDoctorFilter}
             onChange={(e) => setSelectedDoctorFilter(e.target.value)}
-            className="bg-slate-900 border border-slate-700 text-xs rounded-xl px-3 py-2 text-slate-200 focus:outline-none focus:border-teal-500"
+            className="bg-slate-50 border border-slate-200 text-xs rounded-full px-3.5 py-2 text-slate-700 font-semibold focus:outline-none focus:border-blue-500"
           >
             <option value="ALL">Todos los Profesionales</option>
             {doctors.map(d => (
@@ -185,7 +185,7 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
           <select
             value={selectedStatusFilter}
             onChange={(e) => setSelectedStatusFilter(e.target.value)}
-            className="bg-slate-900 border border-slate-700 text-xs rounded-xl px-3 py-2 text-slate-200 focus:outline-none focus:border-teal-500"
+            className="bg-slate-50 border border-slate-200 text-xs rounded-full px-3.5 py-2 text-slate-700 font-semibold focus:outline-none focus:border-blue-500"
           >
             <option value="ALL">Todos los Estados</option>
             <option value="SCHEDULED">Agendada</option>
@@ -200,10 +200,10 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
             <button
               type="button"
               onClick={() => setShowNewAptModal(true)}
-              className="py-2 px-4 bg-teal-600 hover:bg-teal-500 text-white rounded-xl text-xs sm:text-sm font-bold flex items-center gap-2 shadow-lg shadow-teal-600/30 transition-all"
+              className="py-2 px-4 bg-slate-900 hover:bg-slate-800 text-white rounded-full text-xs font-bold flex items-center gap-1.5 shadow-sm transition-all active:scale-95"
             >
               <Plus className="w-4 h-4" />
-              <span>Agendar Cita</span>
+              <span>+ Agendar Cita</span>
             </button>
           )}
         </div>
@@ -213,12 +213,12 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
       <div className="flex flex-col gap-4">
         
         {/* Timeline Header Summary */}
-        <div className="flex items-center justify-between text-xs text-slate-400 px-2">
+        <div className="flex items-center justify-between text-xs text-slate-500 px-2 font-medium">
           <span>{filteredAppointments.length} citas programadas para el {selectedDate}</span>
           <div className="flex items-center gap-3">
-            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-teal-400 animate-pulse"></span> En Box</span>
-            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-amber-400"></span> Sala de Espera</span>
-            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-blue-400"></span> Confirmada</span>
+            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span> En Box</span>
+            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-amber-500"></span> Sala de Espera</span>
+            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-blue-500"></span> Confirmada</span>
           </div>
         </div>
 
@@ -231,46 +231,46 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
             return (
               <div 
                 key={apt.id}
-                className="bg-slate-800/80 hover:bg-slate-800 border border-slate-700/80 rounded-2xl p-5 shadow-lg flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4 transition-all"
+                className="bg-white hover:border-slate-300 border border-slate-200/90 rounded-3xl p-5 shadow-[0_4px_20px_rgba(0,0,0,0.03)] hover:shadow-[0_8px_30px_rgba(0,0,0,0.06)] flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4 transition-all"
               >
                 {/* Time, Box, & Patient Info */}
                 <div className="flex items-start gap-4">
                   {/* Time Badge */}
-                  <div className="flex flex-col items-center justify-center p-3 bg-slate-900 rounded-xl border border-slate-700 min-w-[90px] text-center">
-                    <span className="text-base font-bold font-mono text-teal-300">{apt.startTime}</span>
-                    <span className="text-[11px] font-mono text-slate-400">{apt.endTime}</span>
-                    <span className="text-[10px] text-slate-500 mt-1">{apt.durationMinutes} min</span>
+                  <div className="flex flex-col items-center justify-center p-3 bg-slate-50 rounded-2xl border border-slate-200 min-w-[90px] text-center">
+                    <span className="text-base font-black font-mono text-slate-900">{apt.startTime}</span>
+                    <span className="text-[11px] font-mono text-slate-500">{apt.endTime}</span>
+                    <span className="text-[10px] text-slate-400 font-semibold mt-1">{apt.durationMinutes} min</span>
                   </div>
 
                   {/* Patient & Doctor details */}
                   <div className="flex flex-col gap-1">
                     <div className="flex flex-wrap items-center gap-2">
-                      <h4 className="text-base font-bold text-slate-100">{apt.patientName}</h4>
+                      <h4 className="text-base font-bold text-slate-900">{apt.patientName}</h4>
                       <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold border ${badge.bg}`}>
                         {badge.label}
                       </span>
-                      <span className="text-xs px-2 py-0.5 rounded bg-slate-700 text-slate-300 font-mono">
+                      <span className="text-xs px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-700 font-mono font-semibold border border-slate-200">
                         {apt.boxNumber}
                       </span>
                     </div>
 
-                    <div className="flex flex-wrap items-center gap-3 text-xs text-slate-400 mt-0.5">
-                      <span className="flex items-center gap-1 text-slate-300">
-                        <Stethoscope className="w-3.5 h-3.5 text-teal-400" />
+                    <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500 mt-0.5 font-medium">
+                      <span className="flex items-center gap-1 text-slate-700">
+                        <Stethoscope className="w-3.5 h-3.5 text-blue-600" />
                         {apt.doctorName} ({apt.doctorSpecialty})
                       </span>
                       <span className="flex items-center gap-1">
-                        <MapPin className="w-3.5 h-3.5 text-slate-500" />
+                        <MapPin className="w-3.5 h-3.5 text-slate-400" />
                         {apt.branchName}
                       </span>
                     </div>
 
-                    <p className="text-xs text-slate-300 font-medium mt-1">
-                      <strong className="text-teal-400">Tratamiento:</strong> {apt.reason}
+                    <p className="text-xs text-slate-700 font-medium mt-1">
+                      <strong className="text-blue-600">Tratamiento:</strong> {apt.reason}
                     </p>
 
                     {apt.notes && (
-                      <p className="text-[11px] text-amber-300/90 bg-amber-950/30 px-2.5 py-0.5 rounded border border-amber-500/30 inline-block w-fit mt-0.5">
+                      <p className="text-[11px] text-amber-800 bg-amber-50 px-2.5 py-0.5 rounded-xl border border-amber-200 inline-block w-fit mt-0.5 font-medium">
                         ⚠️ {apt.notes}
                       </p>
                     )}
@@ -278,14 +278,14 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
                 </div>
 
                 {/* Status Transitions & Quick Actions */}
-                <div className="flex flex-wrap items-center gap-2 self-stretch lg:self-auto justify-end pt-3 lg:pt-0 border-t lg:border-t-0 border-slate-700/60">
+                <div className="flex flex-wrap items-center gap-2 self-stretch lg:self-auto justify-end pt-3 lg:pt-0 border-t lg:border-t-0 border-slate-100">
                   
                   {/* Status Dropdown */}
                   {activeRole !== 'PATIENT' && (
                     <select
                       value={apt.status}
                       onChange={(e) => onUpdateAppointmentStatus(apt.id, e.target.value as AppointmentStatus)}
-                      className="bg-slate-900 border border-slate-700 text-xs font-semibold rounded-xl px-3 py-2 text-slate-200 focus:outline-none focus:border-teal-500"
+                      className="bg-slate-50 border border-slate-200 text-xs font-semibold rounded-full px-3 py-2 text-slate-700 focus:outline-none focus:border-blue-500"
                     >
                       <option value="SCHEDULED">Agendada</option>
                       <option value="CONFIRMED">Confirmada</option>
@@ -301,10 +301,10 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
                   <button
                     type="button"
                     onClick={() => handleOpenWhatsAppReminder(apt)}
-                    className="p-2 bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/30 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all"
+                    className="p-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-full text-xs font-bold flex items-center gap-1.5 transition-all"
                     title="Enviar Recordatorio por WhatsApp"
                   >
-                    <MessageSquare className="w-4 h-4 text-emerald-400" />
+                    <MessageSquare className="w-4 h-4 text-emerald-600" />
                     <span className="hidden sm:inline">WhatsApp</span>
                   </button>
 
@@ -313,10 +313,10 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
                     <button
                       type="button"
                       onClick={() => onOpenPatientFile(patientObj)}
-                      className="py-2 px-3 bg-teal-600 hover:bg-teal-500 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-md shadow-teal-600/20 transition-all"
+                      className="py-2 px-3.5 bg-slate-900 hover:bg-slate-800 text-white rounded-full text-xs font-bold flex items-center gap-1.5 shadow-sm transition-all"
                     >
                       <Activity className="w-4 h-4" />
-                      <span>Ver Ficha Clínica</span>
+                      <span>Ver Ficha</span>
                     </button>
                   )}
                 </div>
@@ -325,10 +325,10 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
           })}
 
           {filteredAppointments.length === 0 && (
-            <div className="bg-slate-800/40 p-12 rounded-2xl border border-dashed border-slate-700 text-center text-slate-400 flex flex-col items-center">
-              <CalendarIcon className="w-12 h-12 text-slate-600 mb-3" />
-              <p className="text-base font-semibold text-slate-300">No hay citas registradas para este día o filtros seleccionados.</p>
-              <p className="text-xs text-slate-500 mt-1">Haz clic en "Agendar Cita" para programar una nueva atención médica/odontológica.</p>
+            <div className="bg-white p-12 rounded-3xl border border-dashed border-slate-300 text-center text-slate-500 flex flex-col items-center">
+              <CalendarIcon className="w-12 h-12 text-slate-400 mb-3" />
+              <p className="text-base font-bold text-slate-800">No hay citas registradas para este día o filtros seleccionados.</p>
+              <p className="text-xs text-slate-500 mt-1">Haz clic en "+ Agendar Cita" para programar una nueva atención médica/odontológica.</p>
             </div>
           )}
         </div>
@@ -337,44 +337,44 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
 
       {/* MODAL: Enviar Recordatorio WhatsApp */}
       {showWhatsAppModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in">
-          <div className="bg-slate-900 border border-slate-700 w-full max-w-lg rounded-2xl shadow-2xl p-6 flex flex-col gap-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs animate-in fade-in">
+          <div className="bg-white border border-slate-200 w-full max-w-lg rounded-3xl shadow-2xl p-6 sm:p-7 flex flex-col gap-4">
             
-            <div className="flex items-center justify-between pb-3 border-b border-slate-800">
-              <h3 className="font-bold text-base text-slate-100 flex items-center gap-2">
-                <MessageSquare className="w-5 h-5 text-emerald-400" />
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <h3 className="font-bold text-base text-slate-900 flex items-center gap-2">
+                <MessageSquare className="w-5 h-5 text-emerald-600" />
                 Recordatorio Automático por WhatsApp
               </h3>
               <button
                 type="button"
                 onClick={() => setShowWhatsAppModal(null)}
-                className="text-slate-400 hover:text-white"
+                className="text-slate-400 hover:text-slate-700 p-1 rounded-lg"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
             <div className="flex flex-col gap-3">
-              <div className="bg-slate-950 p-3 rounded-xl border border-slate-800 text-xs text-slate-300">
+              <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-200 text-xs text-slate-700">
                 <p><strong>Paciente:</strong> {showWhatsAppModal.patientName}</p>
-                <p className="text-teal-400 font-mono mt-0.5"><strong>WhatsApp:</strong> {showWhatsAppModal.patientPhone}</p>
+                <p className="text-emerald-700 font-mono mt-0.5"><strong>WhatsApp:</strong> {showWhatsAppModal.patientPhone}</p>
               </div>
 
               <div>
-                <label className="text-xs font-semibold text-slate-300 block mb-1">
+                <label className="text-xs font-semibold text-slate-700 block mb-1">
                   Plantilla de Mensaje
                 </label>
                 <textarea
                   rows={5}
                   value={customWhatsAppMsg}
                   onChange={(e) => setCustomWhatsAppMsg(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-xs text-slate-200 focus:outline-none focus:border-emerald-500 font-sans"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-2xl p-3 text-xs text-slate-900 focus:outline-none focus:border-blue-500 focus:bg-white font-sans"
                 />
               </div>
 
               {whatsappSentSuccess && (
-                <div className="p-3 bg-emerald-950/50 border border-emerald-500/40 rounded-xl text-xs text-emerald-300 flex items-center gap-2">
-                  <CheckCircle2 className="w-4 h-4" />
+                <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-2xl text-xs text-emerald-800 flex items-center gap-2 font-medium">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600" />
                   <span>Enlace de WhatsApp abierto en nueva pestaña exitosamente.</span>
                 </div>
               )}

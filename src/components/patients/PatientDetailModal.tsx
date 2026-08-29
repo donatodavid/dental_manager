@@ -40,7 +40,8 @@ import {
   MessageSquare,
   Receipt,
   CheckCircle2,
-  FolderPlus
+  FolderPlus,
+  Trash2
 } from 'lucide-react';
 import { BudgetPrintModal } from '../billing/BudgetPrintModal';
 import { PatientPrescriptionGenerator } from './PatientPrescriptionGenerator';
@@ -51,6 +52,7 @@ interface PatientDetailModalProps {
   isOpen?: boolean;
   onClose: () => void;
   onUpdatePatient: (updatedPatient: Patient) => void;
+  onDeletePatient?: (patientId: string) => void;
   doctors: ProfessionalDoctor[];
   activeRole: UserRole;
   currentDoctorId?: string;
@@ -67,6 +69,7 @@ export const PatientDetailModal: React.FC<PatientDetailModalProps> = ({
   isOpen = true,
   onClose,
   onUpdatePatient,
+  onDeletePatient,
   doctors,
   activeRole,
   currentDoctorId = 'doc-1',
@@ -80,6 +83,7 @@ export const PatientDetailModal: React.FC<PatientDetailModalProps> = ({
   const [activeTab, setActiveTab] = useState<'BUDGETS' | 'PRESCRIPTION' | 'DOCUMENTS'>('BUDGETS');
   const [showPatientBudgetModal, setShowPatientBudgetModal] = useState(false);
   const [selectedBudgetForPrint, setSelectedBudgetForPrint] = useState<TreatmentBudget | null>(null);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   // New evolution form state
   const [showNewEvolutionModal, setShowNewEvolutionModal] = useState(false);
@@ -97,11 +101,29 @@ export const PatientDetailModal: React.FC<PatientDetailModalProps> = ({
   const [xrayContrast, setXrayContrast] = useState(100);
   const [xrayInvert, setXrayInvert] = useState(false);
 
-  // New Document Upload Simulation
+  // New Document Upload State
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [docTitle, setDocTitle] = useState('');
   const [docCategory, setDocCategory] = useState<'xray' | 'panoramic' | 'tomography' | 'consent' | 'lab_report'>('xray');
   const [docNotes, setDocNotes] = useState('');
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [uploadedFilePreview, setUploadedFilePreview] = useState<string | null>(null);
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setSelectedFile(file);
+      if (!docTitle) {
+        const nameWithoutExt = file.name.replace(/\.[^/.]+$/, "");
+        setDocTitle(nameWithoutExt);
+      }
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        setUploadedFilePreview(event.target?.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
 
   if (isOpen === false) return null;
 
@@ -172,7 +194,7 @@ export const PatientDetailModal: React.FC<PatientDetailModalProps> = ({
     setPrescriptionInput('');
   };
 
-  // Add Document
+  // Add Document / Radiography
   const handleSaveDocument = (e: React.FormEvent) => {
     e.preventDefault();
     if (!docTitle) return;
@@ -185,15 +207,17 @@ export const PatientDetailModal: React.FC<PatientDetailModalProps> = ({
       lab_report: '#'
     };
 
+    const fileSizeStr = selectedFile ? `${(selectedFile.size / (1024 * 1024)).toFixed(1)} MB` : '2.5 MB';
+
     const newDoc: ClinicalDocument = {
       id: `doc-${Date.now()}`,
       patientId: patient.id,
       title: docTitle,
       category: docCategory,
-      url: sampleUrls[docCategory] || sampleUrls.xray,
+      url: uploadedFilePreview || sampleUrls[docCategory] || sampleUrls.xray,
       uploadDate: new Date().toISOString().split('T')[0],
       doctorName: currentDoctor.name,
-      size: '2.5 MB',
+      size: fileSizeStr,
       notes: docNotes,
       signedConsent: docCategory === 'consent'
     };
@@ -208,42 +232,44 @@ export const PatientDetailModal: React.FC<PatientDetailModalProps> = ({
     setShowUploadModal(false);
     setDocTitle('');
     setDocNotes('');
+    setSelectedFile(null);
+    setUploadedFilePreview(null);
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-slate-950/80 backdrop-blur-sm overflow-y-auto animate-in fade-in duration-200">
-      <div className="bg-slate-900 border border-slate-700 w-full max-w-7xl max-h-[95vh] rounded-2xl shadow-2xl flex flex-col overflow-hidden">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-slate-900/40 backdrop-blur-sm overflow-y-auto animate-in fade-in duration-200">
+      <div className="bg-white border border-slate-200 w-full max-w-7xl max-h-[95vh] rounded-3xl shadow-2xl flex flex-col overflow-hidden">
         
         {/* Top Clinical Header Bar */}
-        <div className="bg-slate-800/90 px-6 py-4 border-b border-slate-700 flex flex-wrap items-center justify-between gap-4">
+        <div className="bg-slate-50/80 px-6 py-4 border-b border-slate-200 flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-4">
-            <div className="w-12 h-12 rounded-xl bg-teal-500/20 border border-teal-500/40 flex items-center justify-center text-teal-300 font-bold text-lg">
+            <div className="w-12 h-12 rounded-2xl bg-blue-50 border border-blue-200 flex items-center justify-center text-blue-700 font-extrabold text-lg shadow-xs">
               {patient.firstName[0]}{patient.lastName[0]}
             </div>
             <div>
               <div className="flex items-center gap-3">
-                <h2 className="text-xl font-bold text-slate-100">
+                <h2 className="text-xl font-bold text-slate-900">
                   {patient.firstName} {patient.lastName}
                 </h2>
-                <span className="px-2.5 py-0.5 rounded-full text-xs font-mono font-semibold bg-slate-700 text-slate-300">
+                <span className="px-2.5 py-0.5 rounded-full text-xs font-mono font-semibold bg-slate-100 text-slate-700 border border-slate-200">
                   RUT: {patient.documentId}
                 </span>
-                <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-teal-500/20 text-teal-300 border border-teal-500/30">
+                <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
                   {patient.status === 'ACTIVE' ? 'Paciente Activo' : 'Archivado'}
                 </span>
               </div>
-              <p className="text-xs text-slate-400 mt-0.5">
-                {age} años • {patient.gender === 'F' ? 'Femenino' : patient.gender === 'M' ? 'Masculino' : 'Otro'} • Previsión: <strong className="text-slate-300">{patient.insuranceProvider}</strong>
+              <p className="text-xs text-slate-500 mt-0.5">
+                {age} años • {patient.gender === 'F' ? 'Femenino' : patient.gender === 'M' ? 'Masculino' : 'Otro'} • Previsión: <strong className="text-slate-800">{patient.insuranceProvider}</strong>
               </p>
             </div>
           </div>
 
           {/* Quick Critical Allergy Alert Banner */}
           {patient.allergies.length > 0 && (
-            <div className="flex items-center gap-2 bg-red-950/80 border border-red-500/50 px-3 py-1.5 rounded-xl text-red-200 animate-pulse">
-              <ShieldAlert className="w-5 h-5 text-red-400 flex-shrink-0" />
+            <div className="flex items-center gap-2 bg-red-50 border border-red-200 px-3 py-1.5 rounded-2xl text-red-700">
+              <ShieldAlert className="w-5 h-5 text-red-600 flex-shrink-0" />
               <div className="text-xs">
-                <span className="font-bold block text-red-300">ALERTA MÉDICA CRÍTICA:</span>
+                <span className="font-bold block text-red-800">ALERTA MÉDICA CRÍTICA:</span>
                 <span>{patient.allergies.map(a => a.allergen).join(', ')}</span>
               </div>
             </div>
@@ -251,20 +277,32 @@ export const PatientDetailModal: React.FC<PatientDetailModalProps> = ({
 
           {/* Actions & Close */}
           <div className="flex items-center gap-2">
+            {activeRole !== 'PATIENT' && onDeletePatient && (
+              <button
+                type="button"
+                onClick={() => setShowDeleteConfirm(true)}
+                className="p-2 px-3 rounded-full bg-white hover:bg-red-50 text-slate-500 hover:text-red-600 text-xs font-semibold border border-slate-200 hover:border-red-200 flex items-center gap-1.5 transition-all shadow-2xs cursor-pointer"
+                title="Eliminar Ficha de Paciente"
+              >
+                <Trash2 className="w-4 h-4" />
+                <span className="hidden sm:inline">Eliminar Paciente</span>
+              </button>
+            )}
+
             <button
               type="button"
               onClick={() => window.print()}
-              className="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium border border-slate-700 flex items-center gap-1.5 transition-all"
+              className="p-2 px-3 rounded-full bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold border border-slate-200 flex items-center gap-1.5 transition-all shadow-2xs"
               title="Imprimir Ficha Clínica"
             >
-              <Printer className="w-4 h-4" />
+              <Printer className="w-4 h-4 text-slate-500" />
               <span className="hidden sm:inline">Imprimir Ficha</span>
             </button>
 
             <button
               type="button"
               onClick={onClose}
-              className="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition-all"
+              className="p-2 rounded-full bg-white hover:bg-slate-100 text-slate-500 hover:text-slate-900 border border-slate-200 transition-all cursor-pointer"
             >
               <X className="w-5 h-5" />
             </button>
@@ -281,22 +319,22 @@ export const PatientDetailModal: React.FC<PatientDetailModalProps> = ({
 
           if (patientBudgets.length > 0) {
             return (
-              <div className="bg-teal-950/50 border-b border-teal-500/30 px-6 py-2.5 flex flex-wrap items-center justify-between gap-3 text-xs">
+              <div className="bg-blue-50/50 border-b border-blue-100 px-6 py-2.5 flex flex-wrap items-center justify-between gap-3 text-xs">
                 <div className="flex items-center gap-4 flex-wrap">
-                  <div className="flex items-center gap-1.5 text-teal-300 font-bold">
-                    <DollarSign className="w-4 h-4 text-teal-400" />
+                  <div className="flex items-center gap-1.5 text-blue-900 font-bold">
+                    <DollarSign className="w-4 h-4 text-blue-600" />
                     <span>Presupuesto Activo:</span>
-                    <span className="font-mono text-sm text-white font-bold">${totalBudgeted.toLocaleString('es-CL')}</span>
+                    <span className="font-mono text-sm text-slate-900 font-bold">${totalBudgeted.toLocaleString('es-CL')}</span>
                   </div>
-                  <div className="flex items-center gap-2 text-slate-300">
-                    <span className="text-slate-400">Abonado:</span>
-                    <span className="font-mono text-emerald-400 font-semibold">${totalPaid.toLocaleString('es-CL')}</span>
+                  <div className="flex items-center gap-2 text-slate-700">
+                    <span className="text-slate-500">Abonado:</span>
+                    <span className="font-mono text-emerald-600 font-semibold">${totalPaid.toLocaleString('es-CL')}</span>
                   </div>
-                  <div className="flex items-center gap-2 text-slate-300">
-                    <span className="text-slate-400">Saldo Pendiente:</span>
-                    <span className="font-mono text-amber-400 font-bold">${balanceDue.toLocaleString('es-CL')}</span>
+                  <div className="flex items-center gap-2 text-slate-700">
+                    <span className="text-slate-500">Saldo Pendiente:</span>
+                    <span className="font-mono text-orange-600 font-bold">${balanceDue.toLocaleString('es-CL')}</span>
                   </div>
-                  <span className="text-[11px] bg-teal-900/80 text-teal-200 px-2 py-0.5 rounded-full font-mono border border-teal-500/40">
+                  <span className="text-[11px] bg-white text-slate-700 px-2.5 py-0.5 rounded-full font-mono border border-slate-200 font-medium">
                     {totalItems} tratamientos presupuestados
                   </span>
                 </div>
@@ -305,10 +343,10 @@ export const PatientDetailModal: React.FC<PatientDetailModalProps> = ({
                   <button
                     type="button"
                     onClick={() => setActiveTab('BUDGETS')}
-                    className={`px-3 py-1 rounded-lg text-xs font-bold flex items-center gap-1 transition-all ${
+                    className={`px-3 py-1.5 rounded-full text-xs font-bold flex items-center gap-1 transition-all ${
                       activeTab === 'BUDGETS'
-                        ? 'bg-teal-500 text-slate-950 shadow-md'
-                        : 'bg-teal-600/80 hover:bg-teal-500 text-white'
+                        ? 'bg-slate-900 text-white shadow-sm'
+                        : 'bg-white hover:bg-slate-100 text-slate-700 border border-slate-200'
                     }`}
                   >
                     <DollarSign className="w-3.5 h-3.5" />
@@ -318,10 +356,10 @@ export const PatientDetailModal: React.FC<PatientDetailModalProps> = ({
                     <button
                       type="button"
                       onClick={() => setSelectedBudgetForPrint(patientBudgets[0])}
-                      className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-xs font-semibold flex items-center gap-1 border border-slate-700 transition-all"
+                      className="px-3 py-1.5 bg-white hover:bg-slate-50 text-slate-700 rounded-full text-xs font-semibold flex items-center gap-1 border border-slate-200 transition-all shadow-2xs"
                       title="Descargar / Imprimir PDF"
                     >
-                      <Printer className="w-3.5 h-3.5 text-teal-400" />
+                      <Printer className="w-3.5 h-3.5 text-blue-600" />
                       <span>PDF</span>
                     </button>
                   )}
@@ -330,15 +368,15 @@ export const PatientDetailModal: React.FC<PatientDetailModalProps> = ({
             );
           } else {
             return (
-              <div className="bg-slate-800/50 border-b border-slate-700 px-6 py-2.5 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-400">
-                <span className="flex items-center gap-1.5 text-slate-300">
-                  <DollarSign className="w-4 h-4 text-teal-400" />
+              <div className="bg-slate-50 border-b border-slate-200 px-6 py-2.5 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500">
+                <span className="flex items-center gap-1.5 text-slate-700">
+                  <DollarSign className="w-4 h-4 text-blue-600" />
                   El paciente aún no cuenta con un presupuesto emitido.
                 </span>
                 <button
                   type="button"
                   onClick={() => setShowPatientBudgetModal(true)}
-                  className="px-3 py-1 bg-teal-600 hover:bg-teal-500 text-white rounded-lg text-xs font-bold flex items-center gap-1 transition-all shadow-sm"
+                  className="px-3.5 py-1 bg-slate-900 hover:bg-slate-800 text-white rounded-full text-xs font-bold flex items-center gap-1 transition-all shadow-xs"
                 >
                   <Plus className="w-3.5 h-3.5" />
                   + Crear Presupuesto Odontológico
@@ -349,19 +387,19 @@ export const PatientDetailModal: React.FC<PatientDetailModalProps> = ({
         })()}
 
         {/* Tab Navigation */}
-        <div className="bg-slate-900 border-b border-slate-800 px-6 flex overflow-x-auto gap-1">
+        <div className="bg-white border-b border-slate-200 px-6 flex overflow-x-auto gap-2 pt-2">
           <button
             type="button"
             onClick={() => setActiveTab('BUDGETS')}
-            className={`px-4 py-3 text-xs sm:text-sm font-semibold border-b-2 transition-all flex items-center gap-2 whitespace-nowrap ${
+            className={`px-4 py-2.5 text-xs sm:text-sm font-bold border-b-2 transition-all flex items-center gap-2 whitespace-nowrap ${
               activeTab === 'BUDGETS'
-                ? 'border-teal-500 text-teal-400 bg-slate-800/40'
-                : 'border-transparent text-slate-400 hover:text-slate-200'
+                ? 'border-blue-600 text-blue-600 bg-blue-50/50 rounded-t-xl'
+                : 'border-transparent text-slate-500 hover:text-slate-800'
             }`}
           >
             <DollarSign className="w-4 h-4" />
             <span>Presupuestos & Tratamientos</span>
-            <span className="px-1.5 py-0.2 text-[10px] bg-teal-950 text-teal-300 border border-teal-500/40 rounded-full font-mono font-bold">
+            <span className="px-2 py-0.5 text-[10px] bg-slate-100 text-slate-700 border border-slate-200 rounded-full font-mono font-bold">
               {budgets.filter(b => b.patientId === patient.id).length}
             </span>
           </button>
@@ -369,15 +407,15 @@ export const PatientDetailModal: React.FC<PatientDetailModalProps> = ({
           <button
             type="button"
             onClick={() => setActiveTab('PRESCRIPTION')}
-            className={`px-4 py-3 text-xs sm:text-sm font-semibold border-b-2 transition-all flex items-center gap-2 whitespace-nowrap ${
+            className={`px-4 py-2.5 text-xs sm:text-sm font-bold border-b-2 transition-all flex items-center gap-2 whitespace-nowrap ${
               activeTab === 'PRESCRIPTION'
-                ? 'border-teal-500 text-teal-400 bg-slate-800/40'
-                : 'border-transparent text-slate-400 hover:text-slate-200'
+                ? 'border-blue-600 text-blue-600 bg-blue-50/50 rounded-t-xl'
+                : 'border-transparent text-slate-500 hover:text-slate-800'
             }`}
           >
             <FileText className="w-4 h-4" />
             <span>Crear Ficha / Receta Médica (PDF)</span>
-            <span className="px-1.5 py-0.2 text-[10px] bg-teal-500/20 text-teal-300 rounded-full font-mono font-bold">
+            <span className="px-2 py-0.5 text-[10px] bg-blue-50 text-blue-700 border border-blue-200 rounded-full font-mono font-bold">
               PDF Oficial
             </span>
           </button>
@@ -385,22 +423,22 @@ export const PatientDetailModal: React.FC<PatientDetailModalProps> = ({
           <button
             type="button"
             onClick={() => setActiveTab('DOCUMENTS')}
-            className={`px-4 py-3 text-xs sm:text-sm font-semibold border-b-2 transition-all flex items-center gap-2 whitespace-nowrap ${
+            className={`px-4 py-2.5 text-xs sm:text-sm font-bold border-b-2 transition-all flex items-center gap-2 whitespace-nowrap ${
               activeTab === 'DOCUMENTS'
-                ? 'border-teal-500 text-teal-400 bg-slate-800/40'
-                : 'border-transparent text-slate-400 hover:text-slate-200'
+                ? 'border-blue-600 text-blue-600 bg-blue-50/50 rounded-t-xl'
+                : 'border-transparent text-slate-500 hover:text-slate-800'
             }`}
           >
             <ImageIcon className="w-4 h-4" />
             <span>Radiografías & Visor</span>
-            <span className="px-1.5 py-0.2 text-[10px] bg-slate-800 text-slate-300 rounded-full font-mono">
+            <span className="px-2 py-0.5 text-[10px] bg-slate-100 text-slate-700 rounded-full font-mono">
               {patient.documents.length}
             </span>
           </button>
         </div>
 
         {/* Tab Content Body */}
-        <div className="p-6 overflow-y-auto flex-1 bg-slate-900">
+        <div className="p-6 overflow-y-auto flex-1 bg-slate-50/60">
           
           {/* TAB: GENERADOR DE RECETAS & FICHAS MÉDICAS (PDF) */}
           {activeTab === 'PRESCRIPTION' && (
@@ -417,11 +455,11 @@ export const PatientDetailModal: React.FC<PatientDetailModalProps> = ({
               {/* Header with New Budget CTA */}
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
-                  <h3 className="text-base font-bold text-slate-100 flex items-center gap-2">
-                    <DollarSign className="w-5 h-5 text-teal-400" />
+                  <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                    <DollarSign className="w-5 h-5 text-blue-600" />
                     Presupuestos y Tratamientos del Paciente
                   </h3>
-                  <p className="text-xs text-slate-400">
+                  <p className="text-xs text-slate-500">
                     Historial de cotizaciones, planes odontológicos y desglose por pieza dental.
                   </p>
                 </div>
@@ -430,7 +468,7 @@ export const PatientDetailModal: React.FC<PatientDetailModalProps> = ({
                   <button
                     type="button"
                     onClick={() => setShowPatientBudgetModal(true)}
-                    className="py-2 px-4 bg-teal-600 hover:bg-teal-500 text-white rounded-xl text-xs font-bold flex items-center gap-2 shadow-lg shadow-teal-600/20 transition-all"
+                    className="py-2 px-4 bg-slate-900 hover:bg-slate-800 text-white rounded-full text-xs font-bold flex items-center gap-2 shadow-sm transition-all"
                   >
                     <Plus className="w-4 h-4" />
                     + Crear Nuevo Presupuesto
@@ -441,22 +479,22 @@ export const PatientDetailModal: React.FC<PatientDetailModalProps> = ({
               {/* Budgets List for this patient */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {budgets.filter(b => b.patientId === patient.id).map(budget => (
-                  <div key={budget.id} className="bg-slate-800/80 rounded-2xl border border-slate-700 p-5 shadow-lg flex flex-col justify-between gap-4">
+                  <div key={budget.id} className="bg-white rounded-3xl border border-slate-200/90 p-5 shadow-xs flex flex-col justify-between gap-4">
                     
                     {/* Header */}
                     <div>
-                      <div className="flex items-start justify-between gap-2 pb-3 border-b border-slate-700/80">
+                      <div className="flex items-start justify-between gap-2 pb-3 border-b border-slate-100">
                         <div>
                           <div className="flex items-center gap-2">
-                            <span className="font-mono text-xs font-bold text-teal-400 bg-slate-900 px-2 py-0.5 rounded border border-slate-700">
+                            <span className="font-mono text-xs font-bold text-blue-700 bg-blue-50 px-2.5 py-0.5 rounded-full border border-blue-200">
                               {budget.budgetNumber}
                             </span>
-                            <span className="px-2 py-0.5 text-[10px] uppercase font-bold rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                            <span className="px-2.5 py-0.5 text-[10px] uppercase font-bold rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
                               {budget.status}
                             </span>
                           </div>
-                          <p className="text-xs text-slate-300 font-semibold mt-1">Doctor: {budget.doctorName}</p>
-                          <p className="text-[11px] text-slate-400">Emisión: {budget.createdAt}</p>
+                          <p className="text-xs text-slate-800 font-semibold mt-1">Doctor: {budget.doctorName}</p>
+                          <p className="text-[11px] text-slate-500">Emisión: {budget.createdAt}</p>
                         </div>
 
                         <span className="text-xs text-slate-400 font-mono">Validez: 30d</span>
@@ -464,27 +502,27 @@ export const PatientDetailModal: React.FC<PatientDetailModalProps> = ({
 
                       {/* Treatments Breakdown with Tooth numbers */}
                       <div className="my-3 flex flex-col gap-1.5">
-                        <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+                        <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
                           Tratamientos Presupuestados ({budget.items.length}):
                         </span>
                         <div className="flex flex-col gap-1.5 text-xs max-h-40 overflow-y-auto pr-1">
                           {budget.items.map((item, idx) => (
-                            <div key={item.id || idx} className="flex justify-between items-center bg-slate-900/80 p-2 rounded-lg border border-slate-800">
+                            <div key={item.id || idx} className="flex justify-between items-center bg-slate-50 p-2.5 rounded-xl border border-slate-200">
                               <div className="flex items-center gap-2 min-w-0 pr-2">
                                 {item.toothNumber && item.toothNumber > 0 ? (
-                                  <span className="shrink-0 bg-teal-950 text-teal-300 border border-teal-500/40 text-[10px] font-bold font-mono px-1.5 py-0.5 rounded">
+                                  <span className="shrink-0 bg-blue-100 text-blue-800 border border-blue-200 text-[10px] font-bold font-mono px-1.5 py-0.5 rounded">
                                     Pz. {item.toothNumber}
                                   </span>
                                 ) : (
-                                  <span className="shrink-0 bg-slate-800 text-slate-400 text-[10px] px-1.5 py-0.5 rounded">
+                                  <span className="shrink-0 bg-slate-200 text-slate-700 text-[10px] px-1.5 py-0.5 rounded">
                                     General
                                   </span>
                                 )}
-                                <span className="text-slate-300 truncate font-medium">
+                                <span className="text-slate-800 truncate font-medium">
                                   {item.description}
                                 </span>
                               </div>
-                              <span className="font-mono font-semibold text-slate-200 shrink-0">
+                              <span className="font-mono font-bold text-slate-900 shrink-0">
                                 ${item.patientCopay.toLocaleString('es-CL')}
                               </span>
                             </div>
@@ -494,10 +532,10 @@ export const PatientDetailModal: React.FC<PatientDetailModalProps> = ({
                     </div>
 
                     {/* Financial Summary & Actions (Download PDF, WhatsApp) */}
-                    <div className="pt-3 border-t border-slate-700/80 flex flex-wrap items-center justify-between gap-3">
+                    <div className="pt-3 border-t border-slate-100 flex flex-wrap items-center justify-between gap-3">
                       <div>
-                        <span className="text-[10px] text-slate-400 block uppercase font-semibold">Total Presupuesto:</span>
-                        <span className="text-base font-bold font-mono text-teal-300">
+                        <span className="text-[10px] text-slate-500 block uppercase font-semibold">Total Presupuesto:</span>
+                        <span className="text-base font-black font-mono text-slate-900">
                           ${budget.totalPatient.toLocaleString('es-CL')}
                         </span>
                       </div>
@@ -512,9 +550,9 @@ export const PatientDetailModal: React.FC<PatientDetailModalProps> = ({
                             const itemsList = budget.items
                               .map(i => `• ${i.toothNumber ? `[Pieza ${i.toothNumber}] ` : ''}${i.description} (${i.quantity}x) - $${i.patientCopay.toLocaleString('es-CL')}`)
                               .join('\n');
-                            const message = `🦷 *PRESUPUESTO ODONTOLÓGICO - CIMA DENTAL*\n\n` +
+                            const message = `🦷 *PRESUPUESTO ODONTOLÓGICO - DAARON CONSULTA DENTAL*\n\n` +
                               `Estimado(a) *${patient.firstName} ${patient.lastName}*,\n` +
-                              `Le compartimos el presupuesto para su plan de tratamiento:\n\n` +
+                              `Le compartimos el presupuesto para su plan de tratamiento en Daaron Consulta Dental (Linares):\n\n` +
                               `📋 *N° Presupuesto:* ${budget.budgetNumber}\n` +
                               `👨‍⚕️ *Doctor(a):* ${budget.doctorName}\n` +
                               `📅 *Fecha:* ${budget.createdAt}\n\n` +
@@ -522,6 +560,7 @@ export const PatientDetailModal: React.FC<PatientDetailModalProps> = ({
                               `💵 *Subtotal:* $${budget.subtotal.toLocaleString('es-CL')}\n` +
                               (budget.discountTotal > 0 ? `🏷️ *Descuento:* -$${budget.discountTotal.toLocaleString('es-CL')}\n` : '') +
                               `💰 *TOTAL A PAGAR:* $${budget.totalPatient.toLocaleString('es-CL')}\n\n` +
+                              `Dirección: Maipú 461, Local 304, Piso 3, Edificio Salman, Linares.\n` +
                               `Quedamos atentos a cualquier duda para agendar su próxima atención.`;
 
                             const url = cleanPhone
@@ -529,7 +568,7 @@ export const PatientDetailModal: React.FC<PatientDetailModalProps> = ({
                               : `https://api.whatsapp.com/send?text=${encodeURIComponent(message)}`;
                             window.open(url, '_blank');
                           }}
-                          className="px-2.5 py-1.5 bg-emerald-700/80 hover:bg-emerald-600 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 shadow-sm transition-all"
+                          className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-full text-xs font-semibold flex items-center gap-1.5 shadow-2xs transition-all"
                           title="Enviar por WhatsApp"
                         >
                           <MessageSquare className="w-3.5 h-3.5" />
@@ -540,10 +579,10 @@ export const PatientDetailModal: React.FC<PatientDetailModalProps> = ({
                         <button
                           type="button"
                           onClick={() => setSelectedBudgetForPrint(budget)}
-                          className="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all"
+                          className="px-3 py-1.5 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 rounded-full text-xs font-semibold flex items-center gap-1.5 transition-all shadow-2xs"
                           title="Descargar o Imprimir Presupuesto (PDF)"
                         >
-                          <Printer className="w-3.5 h-3.5 text-teal-400" />
+                          <Printer className="w-3.5 h-3.5 text-blue-600" />
                           <span>PDF</span>
                         </button>
                       </div>
@@ -554,13 +593,13 @@ export const PatientDetailModal: React.FC<PatientDetailModalProps> = ({
               </div>
 
               {budgets.filter(b => b.patientId === patient.id).length === 0 && (
-                <div className="p-8 text-center bg-slate-800/40 rounded-2xl border border-dashed border-slate-700 text-slate-400 text-xs flex flex-col items-center gap-2">
-                  <DollarSign className="w-8 h-8 text-slate-600" />
+                <div className="p-8 text-center bg-white rounded-3xl border border-dashed border-slate-200 text-slate-500 text-xs flex flex-col items-center gap-2">
+                  <DollarSign className="w-8 h-8 text-slate-400" />
                   <p>Este paciente aún no tiene presupuestos registrados.</p>
                   <button
                     type="button"
                     onClick={() => setShowPatientBudgetModal(true)}
-                    className="mt-1 px-4 py-2 bg-teal-600 hover:bg-teal-500 text-white rounded-xl text-xs font-bold transition-all"
+                    className="mt-1 px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-full text-xs font-bold transition-all shadow-xs"
                   >
                     Crear el Primer Presupuesto
                   </button>
@@ -577,14 +616,14 @@ export const PatientDetailModal: React.FC<PatientDetailModalProps> = ({
               {/* Document List on Left */}
               <div className="lg:col-span-4 flex flex-col gap-4">
                 <div className="flex items-center justify-between">
-                  <h4 className="text-sm font-bold text-slate-200 uppercase tracking-wider">
+                  <h4 className="text-sm font-bold text-slate-800 uppercase tracking-wider">
                     Archivos & Radiografías
                   </h4>
                   {activeRole !== 'PATIENT' && (
                     <button
                       type="button"
                       onClick={() => setShowUploadModal(true)}
-                      className="py-1 px-2.5 bg-teal-600 hover:bg-teal-500 text-white rounded-lg text-xs font-semibold flex items-center gap-1 transition-all"
+                      className="py-1 px-3 bg-slate-900 hover:bg-slate-800 text-white rounded-full text-xs font-semibold flex items-center gap-1 transition-all shadow-xs"
                     >
                       <Plus className="w-3.5 h-3.5" />
                       Adjuntar
@@ -597,13 +636,13 @@ export const PatientDetailModal: React.FC<PatientDetailModalProps> = ({
                     <div
                       key={doc.id}
                       onClick={() => setSelectedDoc(doc)}
-                      className={`p-3 rounded-xl border cursor-pointer transition-all flex items-start gap-3 ${
+                      className={`p-3 rounded-2xl border cursor-pointer transition-all flex items-start gap-3 ${
                         selectedDoc?.id === doc.id
-                          ? 'bg-teal-500/20 border-teal-500 text-slate-100 shadow-md'
-                          : 'bg-slate-800/60 border-slate-700 text-slate-300 hover:bg-slate-800'
+                          ? 'bg-blue-50/80 border-blue-300 text-slate-900 shadow-xs'
+                          : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
                       }`}
                     >
-                      <div className="p-2 bg-slate-900 rounded-lg text-teal-400 flex-shrink-0">
+                      <div className="p-2 bg-slate-100 rounded-xl text-blue-600 flex-shrink-0">
                         {doc.category === 'panoramic' || doc.category === 'xray' || doc.category === 'tomography' ? (
                           <ImageIcon className="w-5 h-5" />
                         ) : (
@@ -611,22 +650,22 @@ export const PatientDetailModal: React.FC<PatientDetailModalProps> = ({
                         )}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <h5 className="text-xs font-bold truncate text-slate-200">{doc.title}</h5>
-                        <p className="text-[11px] text-slate-400 mt-0.5">
+                        <h5 className="text-xs font-bold truncate text-slate-900">{doc.title}</h5>
+                        <p className="text-[11px] text-slate-500 mt-0.5">
                           {doc.uploadDate} • {doc.doctorName}
                         </p>
                         <div className="flex items-center gap-2 mt-1">
-                          <span className="px-1.5 py-0.2 text-[10px] uppercase font-mono bg-slate-900 text-slate-300 rounded border border-slate-700">
+                          <span className="px-2 py-0.5 text-[10px] uppercase font-mono bg-slate-100 text-slate-700 rounded-md border border-slate-200">
                             {doc.category}
                           </span>
-                          <span className="text-[10px] text-slate-400">{doc.size}</span>
+                          <span className="text-[10px] text-slate-500">{doc.size}</span>
                         </div>
                       </div>
                     </div>
                   ))}
 
                   {patient.documents.length === 0 && (
-                    <div className="p-6 text-center text-slate-500 text-xs border border-dashed border-slate-700 rounded-xl">
+                    <div className="p-6 text-center text-slate-500 text-xs border border-dashed border-slate-200 rounded-2xl bg-white">
                       No hay archivos ni radiografías cargadas.
                     </div>
                   )}
@@ -636,17 +675,17 @@ export const PatientDetailModal: React.FC<PatientDetailModalProps> = ({
               {/* X-Ray / Image Studio Viewer on Right */}
               <div className="lg:col-span-8 flex flex-col gap-4">
                 {selectedDoc ? (
-                  <div className="bg-slate-950 rounded-2xl border border-slate-800 p-4 flex flex-col gap-3">
+                  <div className="bg-slate-900 rounded-3xl border border-slate-800 p-4 flex flex-col gap-3">
                     
                     {/* Viewer Controls */}
-                    <div className="flex flex-wrap items-center justify-between gap-3 bg-slate-900 p-2.5 rounded-xl border border-slate-800 text-xs">
+                    <div className="flex flex-wrap items-center justify-between gap-3 bg-slate-800 p-2.5 rounded-2xl border border-slate-700 text-xs">
                       <div className="flex items-center gap-2">
-                        <span className="font-bold text-slate-200">{selectedDoc.title}</span>
+                        <span className="font-bold text-slate-100">{selectedDoc.title}</span>
                       </div>
 
                       {/* Filter Adjustments */}
                       <div className="flex items-center gap-3">
-                        <div className="flex items-center gap-1.5 text-slate-400">
+                        <div className="flex items-center gap-1.5 text-slate-300">
                           <Sun className="w-4 h-4 text-amber-400" />
                           <input
                             type="range"
@@ -654,12 +693,12 @@ export const PatientDetailModal: React.FC<PatientDetailModalProps> = ({
                             max="200"
                             value={xrayBrightness}
                             onChange={(e) => setXrayBrightness(parseInt(e.target.value))}
-                            className="w-20 accent-teal-500"
+                            className="w-20 accent-blue-500"
                             title="Brillo"
                           />
                         </div>
 
-                        <div className="flex items-center gap-1.5 text-slate-400">
+                        <div className="flex items-center gap-1.5 text-slate-300">
                           <Contrast className="w-4 h-4 text-blue-400" />
                           <input
                             type="range"
@@ -667,7 +706,7 @@ export const PatientDetailModal: React.FC<PatientDetailModalProps> = ({
                             max="200"
                             value={xrayContrast}
                             onChange={(e) => setXrayContrast(parseInt(e.target.value))}
-                            className="w-20 accent-teal-500"
+                            className="w-20 accent-blue-500"
                             title="Contraste"
                           />
                         </div>
@@ -676,7 +715,7 @@ export const PatientDetailModal: React.FC<PatientDetailModalProps> = ({
                           type="button"
                           onClick={() => setXrayInvert(!xrayInvert)}
                           className={`px-2.5 py-1 rounded font-semibold text-xs transition-all ${
-                            xrayInvert ? 'bg-amber-500 text-slate-950' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                            xrayInvert ? 'bg-amber-500 text-slate-950' : 'bg-slate-700 text-slate-200 hover:bg-slate-600'
                           }`}
                         >
                           Invertir Negativo
@@ -690,7 +729,7 @@ export const PatientDetailModal: React.FC<PatientDetailModalProps> = ({
                             setXrayContrast(100);
                             setXrayInvert(false);
                           }}
-                          className="p-1.5 rounded bg-slate-800 text-slate-400 hover:text-white"
+                          className="p-1.5 rounded bg-slate-700 text-slate-300 hover:text-white"
                           title="Restablecer controles"
                         >
                           <RotateCcw className="w-3.5 h-3.5" />
@@ -699,7 +738,7 @@ export const PatientDetailModal: React.FC<PatientDetailModalProps> = ({
                     </div>
 
                     {/* Image Canvas Viewport */}
-                    <div className="relative w-full h-[400px] sm:h-[480px] bg-black rounded-xl overflow-hidden flex items-center justify-center border border-slate-800">
+                    <div className="relative w-full h-[400px] sm:h-[480px] bg-black rounded-2xl overflow-hidden flex items-center justify-center border border-slate-800">
                       {selectedDoc.url && selectedDoc.url !== '#' ? (
                         <img
                           src={selectedDoc.url}
@@ -713,19 +752,19 @@ export const PatientDetailModal: React.FC<PatientDetailModalProps> = ({
                         />
                       ) : (
                         <div className="p-8 text-center text-slate-400 text-xs">
-                          <FileCheck className="w-12 h-12 text-teal-400 mx-auto mb-3" />
+                          <FileCheck className="w-12 h-12 text-blue-400 mx-auto mb-3" />
                           <p className="font-semibold text-sm text-slate-200">{selectedDoc.title}</p>
                           <p className="mt-1">Documento administrativo o consentimiento firmado digitalmente.</p>
-                          <p className="text-[11px] text-teal-400 mt-2">✓ Firma Biométrica Registrada</p>
+                          <p className="text-[11px] text-emerald-400 mt-2">✓ Firma Biométrica Registrada</p>
                         </div>
                       )}
 
                       {/* Zoom Floating Buttons */}
-                      <div className="absolute bottom-4 right-4 flex items-center gap-2 bg-slate-900/90 p-1.5 rounded-xl border border-slate-700 backdrop-blur-md">
+                      <div className="absolute bottom-4 right-4 flex items-center gap-2 bg-slate-900/90 p-1.5 rounded-2xl border border-slate-700 backdrop-blur-md">
                         <button
                           type="button"
                           onClick={() => setXrayZoom(prev => Math.max(0.5, prev - 0.25))}
-                          className="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg"
+                          className="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl"
                         >
                           <ZoomOut className="w-4 h-4" />
                         </button>
@@ -733,7 +772,7 @@ export const PatientDetailModal: React.FC<PatientDetailModalProps> = ({
                         <button
                           type="button"
                           onClick={() => setXrayZoom(prev => Math.min(3, prev + 0.25))}
-                          className="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg"
+                          className="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl"
                         >
                           <ZoomIn className="w-4 h-4" />
                         </button>
@@ -742,14 +781,14 @@ export const PatientDetailModal: React.FC<PatientDetailModalProps> = ({
 
                     {/* Image notes */}
                     {selectedDoc.notes && (
-                      <div className="bg-slate-900 p-3 rounded-xl border border-slate-800 text-xs text-slate-300">
-                        <strong className="text-teal-400 block mb-0.5">Informe Radiológico / Observaciones:</strong>
+                      <div className="bg-slate-800/80 p-3.5 rounded-2xl border border-slate-700 text-xs text-slate-200">
+                        <strong className="text-blue-400 block mb-0.5">Informe Radiológico / Observaciones:</strong>
                         {selectedDoc.notes}
                       </div>
                     )}
                   </div>
                 ) : (
-                  <div className="h-96 flex items-center justify-center bg-slate-950 rounded-2xl border border-slate-800 text-slate-500 text-xs">
+                  <div className="h-96 flex items-center justify-center bg-white rounded-3xl border border-dashed border-slate-200 text-slate-500 text-xs">
                     Selecciona una radiografía de la lista para visualizarla.
                   </div>
                 )}
@@ -956,11 +995,35 @@ export const PatientDetailModal: React.FC<PatientDetailModalProps> = ({
                 />
               </div>
 
-              {/* Mock upload drop area */}
-              <div className="border-2 border-dashed border-teal-500/40 rounded-xl p-4 text-center bg-teal-500/5 text-xs text-slate-400">
-                <ImageIcon className="w-8 h-8 text-teal-400 mx-auto mb-1.5 opacity-80" />
-                <p className="font-semibold text-slate-300">Arrastra archivos DICOM, JPG o PNG aquí</p>
-                <p className="text-[11px] text-slate-500 mt-1">O haz clic para simular subida instantánea segura</p>
+              {/* Custom File Upload Component */}
+              <div className="flex flex-col items-center justify-center my-2">
+                <label className="custum-file-upload" htmlFor="radiography-file-upload">
+                  <div className="icon">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+                      <g strokeWidth="0" id="SVGRepo_bgCarrier"></g>
+                      <g strokeLinejoin="round" strokeLinecap="round" id="SVGRepo_tracerCarrier"></g>
+                      <g id="SVGRepo_iconCarrier">
+                        <path d="M10 1C9.73478 1 9.48043 1.10536 9.29289 1.29289L3.29289 7.29289C3.10536 7.48043 3 7.73478 3 8V20C3 21.6569 4.34315 23 6 23H7C7.55228 23 8 22.5523 8 22C8 21.4477 7.55228 21 7 21H6C5.44772 21 5 20.5523 5 20V9H10C10.5523 9 11 8.55228 11 8V3H18C18.5523 3 19 3.44772 19 4V9C19 9.55228 19.4477 10 20 10C20.5523 10 21 9.55228 21 9V4C21 2.34315 19.6569 1 18 1H10ZM9 7H6.41421L9 4.41421V7ZM14 15.5C14 14.1193 15.1193 13 16.5 13C17.8807 13 19 14.1193 19 15.5V16V17H20C21.1046 17 22 17.8954 22 19C22 20.1046 21.1046 21 20 21H13C11.8954 21 11 20.1046 11 19C11 17.8954 11.8954 17 13 17H14V16V15.5ZM16.5 11C14.142 11 12.208 12.8136 12.0156 15.122C10.2825 15.5606 9 17.1305 9 19C9 21.2091 10.7909 23 13 23H20C22.2091 23 24 21.2091 24 19C24 17.1305 22.7175 15.5606 20.9844 15.122C20.792 12.8136 18.858 11 16.5 11Z" clipRule="evenodd" fillRule="evenodd"></path>
+                      </g>
+                    </svg>
+                  </div>
+                  <div className="text">
+                    <span className="text-xs truncate max-w-[240px]">
+                      {selectedFile ? selectedFile.name : 'Click to upload image'}
+                    </span>
+                  </div>
+                  <input
+                    type="file"
+                    id="radiography-file-upload"
+                    accept="image/*,.dcm,.pdf"
+                    onChange={handleFileChange}
+                  />
+                </label>
+                {uploadedFilePreview && (
+                  <p className="text-[11px] text-teal-400 mt-2 font-medium">
+                    ✓ Imagen cargada lista para adjuntar
+                  </p>
+                )}
               </div>
 
               <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-800">
@@ -1010,6 +1073,60 @@ export const PatientDetailModal: React.FC<PatientDetailModalProps> = ({
           doctor={doctors.find(d => d.id === selectedBudgetForPrint.doctorId)}
           branch={branches.find(b => b.id === selectedBudgetForPrint.branchId)}
         />
+      )}
+
+      {/* MODAL: Confirmación de Eliminación de Paciente desde Ficha Clínica */}
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs animate-in fade-in">
+          <div className="bg-white border border-slate-200 w-full max-w-md rounded-3xl shadow-2xl p-6 flex flex-col gap-4">
+            <div className="flex items-start gap-3.5">
+              <div className="w-11 h-11 rounded-2xl bg-red-50 border border-red-200 flex items-center justify-center text-red-600 shrink-0 shadow-xs">
+                <AlertTriangle className="w-5 h-5" />
+              </div>
+              <div className="flex-1">
+                <h3 className="font-bold text-base text-slate-900">
+                  ¿Eliminar ficha clínica?
+                </h3>
+                <p className="text-xs text-slate-600 mt-1">
+                  ¿Estás seguro de que deseas eliminar permanentemente la ficha de <strong className="text-slate-900">{patient.firstName} {patient.lastName}</strong>?
+                </p>
+                <div className="flex items-center gap-2 mt-1.5">
+                  <span className="text-[11px] font-mono px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 border border-slate-200">
+                    RUT: {patient.documentId}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-red-50 border border-red-200/80 p-3.5 rounded-2xl text-xs text-red-700 leading-relaxed">
+              ⚠️ <strong>Advertencia:</strong> Esta acción no se puede deshacer. Se borrarán permanentemente sus citas, evoluciones, imágenes radiográficas y presupuestos guardados.
+            </div>
+
+            <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setShowDeleteConfirm(false)}
+                className="px-4 py-2 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold transition-all cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (onDeletePatient) {
+                    onDeletePatient(patient.id);
+                  }
+                  setShowDeleteConfirm(false);
+                  onClose();
+                }}
+                className="px-4 py-2 rounded-full bg-red-600 hover:bg-red-700 text-white text-xs font-bold flex items-center gap-1.5 shadow-sm transition-all active:scale-95 cursor-pointer"
+              >
+                <Trash2 className="w-4 h-4" />
+                <span>Sí, Eliminar Paciente</span>
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
     </div>

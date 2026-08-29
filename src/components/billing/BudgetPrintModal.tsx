@@ -1,6 +1,6 @@
 import React from 'react';
 import { TreatmentBudget, Patient, ProfessionalDoctor, Branch } from '../../types/clinical';
-import { X, Printer, Download, MessageSquare, Share2, CheckCircle2, DollarSign, Calendar, User, Phone, MapPin, Building2 } from 'lucide-react';
+import { X, Printer, Download, MessageSquare, Share2, CheckCircle2, DollarSign, Calendar, User, Phone, MapPin, Building2, Trash2 } from 'lucide-react';
 
 interface BudgetPrintModalProps {
   budget: TreatmentBudget | null;
@@ -10,6 +10,7 @@ interface BudgetPrintModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSendWhatsApp?: (budget: TreatmentBudget) => void;
+  onDeleteBudget?: (budgetId: string) => void;
 }
 
 export const BudgetPrintModal: React.FC<BudgetPrintModalProps> = ({
@@ -19,12 +20,20 @@ export const BudgetPrintModal: React.FC<BudgetPrintModalProps> = ({
   branch,
   isOpen,
   onClose,
-  onSendWhatsApp
+  onSendWhatsApp,
+  onDeleteBudget
 }) => {
   if (!isOpen || !budget) return null;
 
   const handlePrint = () => {
     window.print();
+  };
+
+  const handleDelete = () => {
+    if (window.confirm(`¿Estás seguro de eliminar el presupuesto ${budget.budgetNumber}? Esta acción no se puede deshacer.`)) {
+      onDeleteBudget?.(budget.id);
+      onClose();
+    }
   };
 
   const handleShareWhatsApp = () => {
@@ -100,6 +109,19 @@ export const BudgetPrintModal: React.FC<BudgetPrintModalProps> = ({
               <Printer className="w-4 h-4" />
               <span>Descargar / Imprimir PDF</span>
             </button>
+
+            {/* Delete Budget CTA */}
+            {onDeleteBudget && (
+              <button
+                type="button"
+                onClick={handleDelete}
+                className="px-3 py-2 bg-rose-600/20 hover:bg-rose-600 text-rose-300 hover:text-white border border-rose-500/30 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer"
+                title="Eliminar Presupuesto"
+              >
+                <Trash2 className="w-4 h-4" />
+                <span className="hidden sm:inline">Eliminar</span>
+              </button>
+            )}
 
             {/* Close */}
             <button

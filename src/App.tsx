@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Patient, 
   Appointment, 
@@ -26,6 +26,7 @@ import { PatientList } from './components/patients/PatientList';
 import { PatientDetailModal } from './components/patients/PatientDetailModal';
 import { AgendaView } from './components/agenda/AgendaView';
 import { BillingDashboard } from './components/billing/BillingDashboard';
+import { OverviewDashboard } from './components/dashboard/OverviewDashboard';
 import { ArchitectureGuideModal } from './components/architecture/ArchitectureGuideModal';
 import { DatabaseManagerModal } from './components/database/DatabaseManagerModal';
 import { 
@@ -47,7 +48,8 @@ import {
   HelpCircle,
   Menu,
   X,
-  Database
+  Database,
+  LayoutDashboard
 } from 'lucide-react';
 
 export default function App() {
@@ -62,7 +64,7 @@ export default function App() {
   const [appointments, setAppointments] = useState<Appointment[]>(() => ClinicalDatabase.getAppointments());
 
   // App Navigation & Context State
-  const [activeTab, setActiveTab] = useState<'PATIENTS' | 'AGENDA' | 'BILLING'>('PATIENTS');
+  const [activeTab, setActiveTab] = useState<'OVERVIEW' | 'PATIENTS' | 'AGENDA' | 'BILLING'>('OVERVIEW');
   const [selectedPatientForDetail, setSelectedPatientForDetail] = useState<Patient | null>(null);
   const [activeRole, setActiveRole] = useState<UserRole>('ADMIN');
   const [currentBranchId, setCurrentBranchId] = useState<string>('branch-1');
@@ -74,7 +76,7 @@ export default function App() {
   const currentDoctor = doctors[0];
   const activeBranch = branches.find(b => b.id === currentBranchId) || branches[0];
 
-  // Reload database state after import or reset
+  // Reload database state after import, sync, or reset
   const handleReloadDatabase = () => {
     setPatients(ClinicalDatabase.getPatients());
     setBudgets(ClinicalDatabase.getBudgets());
@@ -82,6 +84,13 @@ export default function App() {
     setPayments(ClinicalDatabase.getPayments());
     setCashSession(ClinicalDatabase.getCashSession());
   };
+
+  // Initialize Cloud SQL synchronization on mount
+  useEffect(() => {
+    ClinicalDatabase.initCloudSync().then(() => {
+      handleReloadDatabase();
+    });
+  }, []);
 
   // Update a single patient in the list
   const handleUpdatePatient = (updatedPatient: Patient) => {
@@ -102,6 +111,19 @@ export default function App() {
       ClinicalDatabase.savePatients(next);
       return next;
     });
+  };
+
+  // Delete a patient
+  const handleDeletePatient = (patientId: string) => {
+    setPatients(prev => {
+      const next = prev.filter(p => p.id !== patientId);
+      ClinicalDatabase.savePatients(next);
+      return next;
+    });
+    ClinicalDatabase.deletePatient(patientId);
+    if (selectedPatientForDetail && selectedPatientForDetail.id === patientId) {
+      setSelectedPatientForDetail(null);
+    }
   };
 
   // Update appointment status
@@ -178,6 +200,16 @@ export default function App() {
     }
   };
 
+  // Delete budget
+  const handleDeleteBudget = (budgetId: string) => {
+    setBudgets(prev => {
+      const next = prev.filter(b => b.id !== budgetId);
+      ClinicalDatabase.saveBudgets(next);
+      return next;
+    });
+    ClinicalDatabase.deleteBudget(budgetId);
+  };
+
   // Process payment
   const handleProcessPayment = (newPayment: PaymentTransaction) => {
     setPayments(prev => {
@@ -223,10 +255,10 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans selection:bg-teal-500 selection:text-white">
+    <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col font-sans selection:bg-blue-600 selection:text-white">
       
       {/* ================= TOP NAVIGATION BAR ================= */}
-      <header className="sticky top-0 z-40 bg-slate-900/95 backdrop-blur-md border-b border-slate-800/80 shadow-lg">
+      <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-200/90 shadow-[0_2px_15px_rgba(0,0,0,0.03)]">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-4">
           
           {/* Logo & Brand Identity */}
@@ -234,89 +266,100 @@ export default function App() {
             <img 
               src="/L.png" 
               alt="Daaron Consulta Dental" 
-              className="h-10 w-auto object-contain drop-shadow-md hover:scale-105 transition-transform"
+              className="h-10 w-auto object-contain drop-shadow-xs hover:scale-105 transition-transform"
             />
             <div>
               <div className="flex items-center gap-2">
-                <span className="font-extrabold text-base sm:text-lg tracking-tight text-white">
+                <span className="font-extrabold text-base sm:text-lg tracking-tight text-slate-900">
                   Daaron Consulta Dental
                 </span>
-                <span className="hidden sm:inline text-[10px] px-2 py-0.5 rounded-full bg-teal-500/20 text-teal-300 border border-teal-500/30 font-semibold">
+                <span className="hidden sm:inline text-[10px] px-2.5 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200 font-bold">
                   Linares
                 </span>
               </div>
-              <p className="text-[10px] text-slate-400 font-medium hidden md:block">
+              <p className="text-[11px] text-slate-500 font-medium hidden md:block">
                 Maipú 461, Local 304, Piso 3 • Edificio Salman
               </p>
             </div>
           </div>
 
           {/* Desktop Navigation Links */}
-          <nav className="hidden lg:flex items-center gap-1 bg-slate-950/80 p-1 rounded-xl border border-slate-800 text-xs font-semibold">
+          <nav className="hidden lg:flex items-center gap-1 bg-slate-100/90 p-1 rounded-2xl border border-slate-200 text-xs font-semibold">
+            <button
+              type="button"
+              onClick={() => setActiveTab('OVERVIEW')}
+              className={`px-3.5 py-2 rounded-xl flex items-center gap-2 transition-all ${
+                activeTab === 'OVERVIEW' ? 'bg-white text-slate-900 shadow-sm font-bold' : 'text-slate-500 hover:text-slate-900'
+              }`}
+            >
+              <LayoutDashboard className="w-4 h-4" />
+              <span>Resumen</span>
+            </button>
+
             <button
               type="button"
               onClick={() => setActiveTab('PATIENTS')}
-              className={`px-3.5 py-2 rounded-lg flex items-center gap-2 transition-all ${
-                activeTab === 'PATIENTS' ? 'bg-teal-600 text-white shadow-md shadow-teal-600/30' : 'text-slate-400 hover:text-slate-200'
+              className={`px-3.5 py-2 rounded-xl flex items-center gap-2 transition-all ${
+                activeTab === 'PATIENTS' ? 'bg-white text-slate-900 shadow-sm font-bold' : 'text-slate-500 hover:text-slate-900'
               }`}
             >
               <Users className="w-4 h-4" />
-              <span>Pacientes & Fichas ({patients.length})</span>
+              <span>Pacientes ({patients.length})</span>
             </button>
 
             <button
               type="button"
               onClick={() => setActiveTab('AGENDA')}
-              className={`px-3.5 py-2 rounded-lg flex items-center gap-2 transition-all ${
-                activeTab === 'AGENDA' ? 'bg-teal-600 text-white shadow-md shadow-teal-600/30' : 'text-slate-400 hover:text-slate-200'
+              className={`px-3.5 py-2 rounded-xl flex items-center gap-2 transition-all ${
+                activeTab === 'AGENDA' ? 'bg-white text-slate-900 shadow-sm font-bold' : 'text-slate-500 hover:text-slate-900'
               }`}
             >
               <Calendar className="w-4 h-4" />
-              <span>Agenda & Citas ({appointments.length})</span>
+              <span>Agenda ({appointments.length})</span>
             </button>
 
             <button
               type="button"
               onClick={() => setActiveTab('BILLING')}
-              className={`px-3.5 py-2 rounded-lg flex items-center gap-2 transition-all ${
-                activeTab === 'BILLING' ? 'bg-teal-600 text-white shadow-md shadow-teal-600/30' : 'text-slate-400 hover:text-slate-200'
+              className={`px-3.5 py-2 rounded-xl flex items-center gap-2 transition-all ${
+                activeTab === 'BILLING' ? 'bg-white text-slate-900 shadow-sm font-bold' : 'text-slate-500 hover:text-slate-900'
               }`}
             >
               <DollarSign className="w-4 h-4" />
-              <span>Presupuestos & Caja</span>
+              <span>Caja & Cobros</span>
             </button>
           </nav>
 
-          {/* Right Controls: Branch, Role & Senior Architecture Guide */}
-          <div className="flex items-center gap-2.5">
+          {/* Right Controls: Branch, Role & Architecture Guide */}
+          <div className="flex items-center gap-2">
             
             {/* Branch Selector */}
-            <div className="hidden sm:flex items-center gap-1.5 bg-slate-950 px-2.5 py-1.5 rounded-xl border border-slate-800 text-xs">
-              <Building2 className="w-3.5 h-3.5 text-teal-400" />
+            <div className="hidden sm:flex items-center gap-1.5 bg-slate-50 px-3 py-1.5 rounded-full border border-slate-200 text-xs">
+              <Building2 className="w-3.5 h-3.5 text-blue-600" />
               <select
                 value={currentBranchId}
                 onChange={(e) => setCurrentBranchId(e.target.value)}
-                className="bg-transparent text-slate-300 font-medium focus:outline-none cursor-pointer"
+                className="bg-transparent text-slate-700 font-semibold focus:outline-none cursor-pointer"
               >
-                <option value="ALL" className="bg-slate-900">Todas las Sucursales</option>
+                <option value="ALL">Todas las Sucursales</option>
                 {branches.map(b => (
-                  <option key={b.id} value={b.id} className="bg-slate-900">{b.name}</option>
+                  <option key={b.id} value={b.id}>{b.name}</option>
                 ))}
               </select>
             </div>
 
             {/* Role Switcher */}
-            <div className="hidden md:flex items-center gap-1.5 bg-slate-950 px-2.5 py-1.5 rounded-xl border border-slate-800 text-xs">
-              <UserCheck className="w-3.5 h-3.5 text-blue-400" />
+            <div className="hidden md:flex items-center gap-1.5 bg-slate-50 px-3 py-1.5 rounded-full border border-slate-200 text-xs">
+              <UserCheck className="w-3.5 h-3.5 text-slate-700" />
               <select
                 value={activeRole}
                 onChange={(e) => setActiveRole(e.target.value as UserRole)}
-                className="bg-transparent text-slate-300 font-medium focus:outline-none cursor-pointer"
+                className="bg-transparent text-slate-700 font-semibold focus:outline-none cursor-pointer"
               >
-                <option value="ADMIN" className="bg-slate-900">Rol: Administrador</option>
-                <option value="DOCTOR" className="bg-slate-900">Rol: Odontólogo</option>
-                <option value="RECEPTIONIST" className="bg-slate-900">Rol: Recepcionista</option>
-                <option value="PATIENT" className="bg-slate-900">Rol: Paciente</option>
+                <option value="ADMIN">Rol: Administrador</option>
+                <option value="DOCTOR">Rol: Odontólogo</option>
+                <option value="RECEPTIONIST">Rol: Recepcionista</option>
+                <option value="PATIENT">Rol: Paciente</option>
               </select>
             </div>
 
@@ -324,21 +367,21 @@ export default function App() {
             <button
               type="button"
               onClick={() => setShowArchGuide(true)}
-              className="py-1.5 px-3 bg-gradient-to-r from-teal-600/30 to-blue-600/30 hover:from-teal-600/50 hover:to-blue-600/50 text-teal-300 border border-teal-500/40 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-sm transition-all"
+              className="py-1.5 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 rounded-full text-xs font-semibold flex items-center gap-1.5 transition-all shadow-2xs"
               title="Ver Esquemas SQL PostgreSQL, Arquitectura HIPAA y API REST"
             >
-              <Code className="w-4 h-4" />
-              <span className="hidden sm:inline">Esquema SQL & API</span>
+              <Code className="w-3.5 h-3.5 text-blue-600" />
+              <span className="hidden sm:inline">Esquema SQL</span>
             </button>
 
             {/* Database Storage Manager Button */}
             <button
               type="button"
               onClick={() => setShowDatabaseModal(true)}
-              className="py-1.5 px-3 bg-slate-900 hover:bg-slate-800 text-teal-400 hover:text-teal-300 border border-teal-500/30 hover:border-teal-500/60 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-sm transition-all"
+              className="py-1.5 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 rounded-full text-xs font-semibold flex items-center gap-1.5 transition-all shadow-2xs"
               title="Administrar Base de Datos: Exportar JSON, Importar y Estado de Almacenamiento"
             >
-              <Database className="w-4 h-4" />
+              <Database className="w-3.5 h-3.5 text-slate-600" />
               <span className="hidden sm:inline">Base de Datos</span>
             </button>
 
@@ -346,7 +389,7 @@ export default function App() {
             <button
               type="button"
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className="lg:hidden p-2 rounded-xl bg-slate-900 text-slate-400 border border-slate-800"
+              className="lg:hidden p-2 rounded-full bg-slate-100 text-slate-700 border border-slate-200"
             >
               {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
             </button>
@@ -356,13 +399,24 @@ export default function App() {
 
         {/* Mobile Navigation Drawer */}
         {mobileMenuOpen && (
-          <div className="lg:hidden bg-slate-900 border-b border-slate-800 px-4 py-3 flex flex-col gap-2 animate-in slide-in-from-top-2">
-            <div className="grid grid-cols-3 gap-2 text-xs font-semibold">
+          <div className="lg:hidden bg-white border-b border-slate-200 px-4 py-3 flex flex-col gap-2 animate-in slide-in-from-top-2 shadow-lg">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs font-semibold">
+              <button
+                type="button"
+                onClick={() => { setActiveTab('OVERVIEW'); setMobileMenuOpen(false); }}
+                className={`p-2.5 rounded-xl flex items-center justify-center gap-1.5 ${
+                  activeTab === 'OVERVIEW' ? 'bg-slate-900 text-white font-bold' : 'bg-slate-100 text-slate-700'
+                }`}
+              >
+                <LayoutDashboard className="w-4 h-4" />
+                <span>Resumen</span>
+              </button>
+
               <button
                 type="button"
                 onClick={() => { setActiveTab('PATIENTS'); setMobileMenuOpen(false); }}
                 className={`p-2.5 rounded-xl flex items-center justify-center gap-1.5 ${
-                  activeTab === 'PATIENTS' ? 'bg-teal-600 text-white' : 'bg-slate-800 text-slate-300'
+                  activeTab === 'PATIENTS' ? 'bg-slate-900 text-white font-bold' : 'bg-slate-100 text-slate-700'
                 }`}
               >
                 <Users className="w-4 h-4" />
@@ -373,7 +427,7 @@ export default function App() {
                 type="button"
                 onClick={() => { setActiveTab('AGENDA'); setMobileMenuOpen(false); }}
                 className={`p-2.5 rounded-xl flex items-center justify-center gap-1.5 ${
-                  activeTab === 'AGENDA' ? 'bg-teal-600 text-white' : 'bg-slate-800 text-slate-300'
+                  activeTab === 'AGENDA' ? 'bg-slate-900 text-white font-bold' : 'bg-slate-100 text-slate-700'
                 }`}
               >
                 <Calendar className="w-4 h-4" />
@@ -384,19 +438,19 @@ export default function App() {
                 type="button"
                 onClick={() => { setActiveTab('BILLING'); setMobileMenuOpen(false); }}
                 className={`p-2.5 rounded-xl flex items-center justify-center gap-1.5 ${
-                  activeTab === 'BILLING' ? 'bg-teal-600 text-white' : 'bg-slate-800 text-slate-300'
+                  activeTab === 'BILLING' ? 'bg-slate-900 text-white font-bold' : 'bg-slate-100 text-slate-700'
                 }`}
               >
                 <DollarSign className="w-4 h-4" />
-                <span>Caja & Cobros</span>
+                <span>Caja</span>
               </button>
             </div>
 
-            <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-800 text-xs">
+            <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-100 text-xs">
               <select
                 value={currentBranchId}
                 onChange={(e) => setCurrentBranchId(e.target.value)}
-                className="bg-slate-950 border border-slate-800 text-slate-300 rounded-lg p-2 flex-1"
+                className="bg-slate-50 border border-slate-200 text-slate-700 rounded-xl p-2 flex-1"
               >
                 <option value="ALL">Todas las Sucursales</option>
                 {branches.map(b => (
@@ -407,7 +461,7 @@ export default function App() {
               <select
                 value={activeRole}
                 onChange={(e) => setActiveRole(e.target.value as UserRole)}
-                className="bg-slate-950 border border-slate-800 text-slate-300 rounded-lg p-2 flex-1"
+                className="bg-slate-50 border border-slate-200 text-slate-700 rounded-xl p-2 flex-1"
               >
                 <option value="ADMIN">Rol: Admin</option>
                 <option value="DOCTOR">Rol: Doctor</option>
@@ -422,6 +476,24 @@ export default function App() {
       {/* ================= MAIN CONTENT CONTAINER ================= */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 flex flex-col gap-6">
         
+        {/* VIEW 0: RESUMEN / DASHBOARD (MATCHING SCREENSHOT) */}
+        {activeTab === 'OVERVIEW' && (
+          <OverviewDashboard
+            patients={patients}
+            appointments={appointments}
+            budgets={budgets}
+            payments={payments}
+            cashSession={cashSession}
+            doctors={doctors}
+            branches={branches}
+            activeRole={activeRole}
+            onNavigateTab={(tab) => setActiveTab(tab)}
+            onSelectPatient={(patient) => setSelectedPatientForDetail(patient)}
+            onOpenNewAppointment={() => setActiveTab('AGENDA')}
+            onOpenNewBudget={() => setActiveTab('BILLING')}
+          />
+        )}
+
         {/* VIEW 1: PACIENTES & FICHAS */}
         {activeTab === 'PATIENTS' && (
           <PatientList
@@ -429,6 +501,7 @@ export default function App() {
             budgets={budgets}
             onSelectPatient={(patient) => setSelectedPatientForDetail(patient)}
             onAddNewPatient={handleAddNewPatient}
+            onDeletePatient={handleDeletePatient}
             activeRole={activeRole}
             doctors={doctors}
           />
@@ -461,6 +534,7 @@ export default function App() {
             branches={branches}
             tariffs={tariffs}
             onSaveBudget={handleSaveBudget}
+            onDeleteBudget={handleDeleteBudget}
             onProcessPayment={handleProcessPayment}
             onUpdateCashSession={(updated) => setCashSession(updated)}
             activeRole={activeRole}
@@ -471,23 +545,23 @@ export default function App() {
       </main>
 
       {/* ================= FOOTER ================= */}
-      <footer className="bg-slate-900/80 border-t border-slate-800 text-xs text-slate-400 py-4 mt-auto">
+      <footer className="bg-white border-t border-slate-200/90 text-xs text-slate-500 py-4 mt-auto">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-3">
           <div className="flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
-            <span className="text-slate-300 font-semibold">Cima Dental SaaS Platform</span>
-            <span>• Conectado a Sucursal {activeBranch.name}</span>
+            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span>
+            <span className="text-slate-800 font-bold">Daaron Consulta Dental</span>
+            <span>• Sucursal {activeBranch.name} ({activeBranch.address})</span>
           </div>
 
-          <div className="flex items-center gap-4 text-slate-400">
-            <span className="flex items-center gap-1">
-              <ShieldCheck className="w-3.5 h-3.5 text-teal-400" />
-              HIPAA & Law 20.584 Compliant
+          <div className="flex items-center gap-4 text-slate-500">
+            <span className="flex items-center gap-1 font-medium">
+              <ShieldCheck className="w-3.5 h-3.5 text-blue-600" />
+              HIPAA & Ley 20.584 Ficha Clínica Digital
             </span>
             <button
               type="button"
               onClick={() => setShowArchGuide(true)}
-              className="text-teal-400 hover:underline font-semibold"
+              className="text-blue-600 hover:underline font-semibold"
             >
               Guía de Arquitectura SQL
             </button>
@@ -502,6 +576,7 @@ export default function App() {
           isOpen={Boolean(selectedPatientForDetail)}
           onClose={() => setSelectedPatientForDetail(null)}
           onUpdatePatient={handleUpdatePatient}
+          onDeletePatient={handleDeletePatient}
           activeRole={activeRole}
           doctors={doctors}
           branches={branches}
@@ -509,6 +584,7 @@ export default function App() {
           budgets={budgets}
           patients={patients}
           onSaveBudget={handleSaveBudget}
+          onDeleteBudget={handleDeleteBudget}
         />
       )}
 

@@ -1,34 +1,31 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { 
   TreatmentBudget, 
   BudgetItem, 
   Patient, 
   ProfessionalDoctor, 
   Branch, 
-  TreatmentTariffItem,
-  ToothNumber
+  TreatmentTariffItem 
 } from '../../types/clinical';
 import { 
   X, 
-  DollarSign, 
   Plus, 
   Trash2, 
-  Check, 
-  Sparkles, 
-  Printer, 
+  Download, 
+  Save, 
   MessageSquare, 
-  FolderPlus,
-  FileCheck,
-  ShieldCheck
+  CheckCircle2, 
+  FileText,
+  UserCheck
 } from 'lucide-react';
-import { BudgetPrintModal } from './BudgetPrintModal';
+import { jsPDF } from 'jspdf';
 
-interface SimpleTreatmentRow {
+export interface BudgetItemInput {
   id: string;
-  toothNumber?: number | '';
-  name: string;
-  price: number;
-  quantity: number;
+  pieza: string;
+  nombre: string;
+  cant: number;
+  precio: number;
 }
 
 interface BudgetBuilderModalProps {
@@ -43,48 +40,83 @@ interface BudgetBuilderModalProps {
   initialItem?: { toothNumber?: number; name: string; price: number };
 }
 
-export const FDI_TOOTH_OPTIONS = [
-  { label: 'Sin pieza / General', value: '' },
-  { label: 'Arcada Superior Completa', value: 100 },
-  { label: 'Arcada Inferior Completa', value: 200 },
-  { label: 'Boca Completa (Ambas Arcadas)', value: 300 },
-  // Cuadrante 1 (Sup. Der)
-  { label: 'Pz. 18 - Tercer Molar Sup. Der.', value: 18 },
-  { label: 'Pz. 17 - Segundo Molar Sup. Der.', value: 17 },
-  { label: 'Pz. 16 - Primer Molar Sup. Der.', value: 16 },
-  { label: 'Pz. 15 - Segundo Premolar Sup. Der.', value: 15 },
-  { label: 'Pz. 14 - Primer Premolar Sup. Der.', value: 14 },
-  { label: 'Pz. 13 - Canino Sup. Der.', value: 13 },
-  { label: 'Pz. 12 - Incisivo Lateral Sup. Der.', value: 12 },
-  { label: 'Pz. 11 - Incisivo Central Sup. Der.', value: 11 },
-  // Cuadrante 2 (Sup. Izq)
-  { label: 'Pz. 21 - Incisivo Central Sup. Izq.', value: 21 },
-  { label: 'Pz. 22 - Incisivo Lateral Sup. Izq.', value: 22 },
-  { label: 'Pz. 23 - Canino Sup. Izq.', value: 23 },
-  { label: 'Pz. 24 - Primer Premolar Sup. Izq.', value: 24 },
-  { label: 'Pz. 25 - Segundo Premolar Sup. Izq.', value: 25 },
-  { label: 'Pz. 26 - Primer Molar Sup. Izq.', value: 26 },
-  { label: 'Pz. 27 - Segundo Molar Sup. Izq.', value: 27 },
-  { label: 'Pz. 28 - Tercer Molar Sup. Izq.', value: 28 },
-  // Cuadrante 3 (Inf. Izq)
-  { label: 'Pz. 31 - Incisivo Central Inf. Izq.', value: 31 },
-  { label: 'Pz. 32 - Incisivo Lateral Inf. Izq.', value: 32 },
-  { label: 'Pz. 33 - Canino Inf. Izq.', value: 33 },
-  { label: 'Pz. 34 - Primer Premolar Inf. Izq.', value: 34 },
-  { label: 'Pz. 35 - Segundo Premolar Inf. Izq.', value: 35 },
-  { label: 'Pz. 36 - Primer Molar Inf. Izq.', value: 36 },
-  { label: 'Pz. 37 - Segundo Molar Inf. Izq.', value: 37 },
-  { label: 'Pz. 38 - Tercer Molar Inf. Izq.', value: 38 },
-  // Cuadrante 4 (Inf. Der)
-  { label: 'Pz. 41 - Incisivo Central Inf. Der.', value: 41 },
-  { label: 'Pz. 42 - Incisivo Lateral Inf. Der.', value: 42 },
-  { label: 'Pz. 43 - Canino Inf. Der.', value: 43 },
-  { label: 'Pz. 44 - Primer Premolar Inf. Der.', value: 44 },
-  { label: 'Pz. 45 - Segundo Premolar Inf. Der.', value: 45 },
-  { label: 'Pz. 46 - Primer Molar Inf. Der.', value: 46 },
-  { label: 'Pz. 47 - Segundo Molar Inf. Der.', value: 47 },
-  { label: 'Pz. 48 - Tercer Molar Inf. Der.', value: 48 },
+export const PIEZAS_DENTALES_OPTIONS = [
+  { group: '', label: 'Gral / General', value: '' },
+  { group: 'Zonas / Arcadas', label: 'Arcada Superior', value: 'Arcada Sup.' },
+  { group: 'Zonas / Arcadas', label: 'Arcada Inferior', value: 'Arcada Inf.' },
+  { group: 'Zonas / Arcadas', label: 'Ambas Arcadas', value: 'Ambas Arcadas' },
+  // Cuadrante 1
+  { group: 'Cuadrante 1 (Superior Der.)', label: '1.8 - Tercer Molar', value: 'Pieza 1.8' },
+  { group: 'Cuadrante 1 (Superior Der.)', label: '1.7 - Segundo Molar', value: 'Pieza 1.7' },
+  { group: 'Cuadrante 1 (Superior Der.)', label: '1.6 - Primer Molar', value: 'Pieza 1.6' },
+  { group: 'Cuadrante 1 (Superior Der.)', label: '1.5 - Segundo Premolar', value: 'Pieza 1.5' },
+  { group: 'Cuadrante 1 (Superior Der.)', label: '1.4 - Primer Premolar', value: 'Pieza 1.4' },
+  { group: 'Cuadrante 1 (Superior Der.)', label: '1.3 - Canino', value: 'Pieza 1.3' },
+  { group: 'Cuadrante 1 (Superior Der.)', label: '1.2 - Incisivo Lateral', value: 'Pieza 1.2' },
+  { group: 'Cuadrante 1 (Superior Der.)', label: '1.1 - Incisivo Central', value: 'Pieza 1.1' },
+  // Cuadrante 2
+  { group: 'Cuadrante 2 (Superior Izq.)', label: '2.1 - Incisivo Central', value: 'Pieza 2.1' },
+  { group: 'Cuadrante 2 (Superior Izq.)', label: '2.2 - Incisivo Lateral', value: 'Pieza 2.2' },
+  { group: 'Cuadrante 2 (Superior Izq.)', label: '2.3 - Canino', value: 'Pieza 2.3' },
+  { group: 'Cuadrante 2 (Superior Izq.)', label: '2.4 - Primer Premolar', value: 'Pieza 2.4' },
+  { group: 'Cuadrante 2 (Superior Izq.)', label: '2.5 - Segundo Premolar', value: 'Pieza 2.5' },
+  { group: 'Cuadrante 2 (Superior Izq.)', label: '2.6 - Primer Molar', value: 'Pieza 2.6' },
+  { group: 'Cuadrante 2 (Superior Izq.)', label: '2.7 - Segundo Molar', value: 'Pieza 2.7' },
+  { group: 'Cuadrante 2 (Superior Izq.)', label: '2.8 - Tercer Molar', value: 'Pieza 2.8' },
+  // Cuadrante 3
+  { group: 'Cuadrante 3 (Inferior Izq.)', label: '3.1 - Incisivo Central', value: 'Pieza 3.1' },
+  { group: 'Cuadrante 3 (Inferior Izq.)', label: '3.2 - Incisivo Lateral', value: 'Pieza 3.2' },
+  { group: 'Cuadrante 3 (Inferior Izq.)', label: '3.3 - Canino', value: 'Pieza 3.3' },
+  { group: 'Cuadrante 3 (Inferior Izq.)', label: '3.4 - Primer Premolar', value: 'Pieza 3.4' },
+  { group: 'Cuadrante 3 (Inferior Izq.)', label: '3.5 - Segundo Premolar', value: 'Pieza 3.5' },
+  { group: 'Cuadrante 3 (Inferior Izq.)', label: '3.6 - Primer Molar', value: 'Pieza 3.6' },
+  { group: 'Cuadrante 3 (Inferior Izq.)', label: '3.7 - Segundo Molar', value: 'Pieza 3.7' },
+  { group: 'Cuadrante 3 (Inferior Izq.)', label: '3.8 - Tercer Molar', value: 'Pieza 3.8' },
+  // Cuadrante 4
+  { group: 'Cuadrante 4 (Inferior Der.)', label: '4.8 - Tercer Molar', value: 'Pieza 4.8' },
+  { group: 'Cuadrante 4 (Inferior Der.)', label: '4.7 - Segundo Molar', value: 'Pieza 4.7' },
+  { group: 'Cuadrante 4 (Inferior Der.)', label: '4.6 - Primer Molar', value: 'Pieza 4.6' },
+  { group: 'Cuadrante 4 (Inferior Der.)', label: '4.5 - Segundo Premolar', value: 'Pieza 4.5' },
+  { group: 'Cuadrante 4 (Inferior Der.)', label: '4.4 - Primer Premolar', value: 'Pieza 4.4' },
+  { group: 'Cuadrante 4 (Inferior Der.)', label: '4.3 - Canino', value: 'Pieza 4.3' },
+  { group: 'Cuadrante 4 (Inferior Der.)', label: '4.2 - Incisivo Lateral', value: 'Pieza 4.2' },
+  { group: 'Cuadrante 4 (Inferior Der.)', label: '4.1 - Incisivo Central', value: 'Pieza 4.1' },
+  // Dentición Temporal
+  { group: 'Dentición Temporal / Niños', label: 'Cuadrante 5 (Sup. Der. Temp.)', value: 'Pieza 5.5-5.1' },
+  { group: 'Dentición Temporal / Niños', label: 'Cuadrante 6 (Sup. Izq. Temp.)', value: 'Pieza 6.1-6.5' },
+  { group: 'Dentición Temporal / Niños', label: 'Cuadrante 7 (Inf. Izq. Temp.)', value: 'Pieza 7.1-7.5' },
+  { group: 'Dentición Temporal / Niños', label: 'Cuadrante 8 (Inf. Der. Temp.)', value: 'Pieza 8.5-8.1' },
 ];
+
+function formatFecha(dateStr: string): string {
+  if (!dateStr) return '—';
+  const parts = dateStr.split('-');
+  if (parts.length !== 3) return dateStr;
+  const [y, m, d] = parts;
+  const meses = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+  const monthIdx = parseInt(m, 10) - 1;
+  const monthName = meses[monthIdx] || '';
+  return `${parseInt(d, 10)} de ${monthName} de ${y}`;
+}
+
+function formatRut(value: string): string {
+  const clean = value.replace(/[^0-9kK]/g, '').toUpperCase();
+  if (!clean) return '';
+  const body = clean.slice(0, -1);
+  const dv = clean.slice(-1);
+  if (!body) return dv;
+  const reversed = body.split('').reverse();
+  let formatted = '';
+  for (let i = 0; i < reversed.length; i++) {
+    if (i > 0 && i % 3 === 0) formatted = '.' + formatted;
+    formatted = reversed[i] + formatted;
+  }
+  return formatted + (dv ? '-' + dv : '');
+}
+
+function formatCLP(val: number | string): string {
+  return "$" + Number(val || 0).toLocaleString('es-CL');
+}
 
 export const BudgetBuilderModal: React.FC<BudgetBuilderModalProps> = ({
   isOpen,
@@ -96,113 +128,406 @@ export const BudgetBuilderModal: React.FC<BudgetBuilderModalProps> = ({
   defaultPatient,
   initialItem
 }) => {
-  const [selectedPatientId, setSelectedPatientId] = useState(defaultPatient?.id || patients[0]?.id || '');
-  const [selectedDoctorId, setSelectedDoctorId] = useState(doctors[0]?.id || '');
-  const [selectedBranchId, setSelectedBranchId] = useState(branches[0]?.id || '');
-  const [discountPercent, setDiscountPercent] = useState<number>(0);
-  
-  // Rows with tooth number, description and price (Starts empty with price 0, subtotal 0)
-  const [rows, setRows] = useState<SimpleTreatmentRow[]>([
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const logoImageRef = useRef<HTMLImageElement | null>(null);
+
+  // Professional state
+  const [doctorNombre, setDoctorNombre] = useState<string>('');
+  const [doctorEsp, setDoctorEsp] = useState<string>('');
+
+  // Patient state
+  const [selectedPatientId, setSelectedPatientId] = useState<string>('');
+  const [pacNombre, setPacNombre] = useState<string>('');
+  const [pacRut, setPacRut] = useState<string>('');
+  const [pacEdad, setPacEdad] = useState<string>('');
+
+  const [fecha, setFecha] = useState<string>(() => new Date().toISOString().split('T')[0]);
+  const [observaciones, setObservaciones] = useState<string>('');
+
+  // Treatments state
+  const [items, setItems] = useState<BudgetItemInput[]>([
     {
-      id: 'row-initial',
-      toothNumber: initialItem?.toothNumber || '',
-      name: initialItem?.name || '',
-      price: initialItem?.price || 0,
-      quantity: 1
+      id: `item-1`,
+      pieza: '',
+      nombre: '',
+      cant: 1,
+      precio: 0
     }
   ]);
 
-  // Ensure there is always at least one row when modal opens
+  // Load logo
   useEffect(() => {
-    if (isOpen) {
-      if (initialItem) {
-        setRows([{
-          id: `row-init-${Date.now()}`,
-          toothNumber: initialItem.toothNumber || '',
-          name: initialItem.name || '',
-          price: initialItem.price || 0,
-          quantity: 1
-        }]);
-      } else if (rows.length === 0) {
-        setRows([{
-          id: `row-${Date.now()}`,
-          toothNumber: '',
-          name: '',
-          price: 0,
-          quantity: 1
-        }]);
+    const img = new Image();
+    img.src = '/L.png';
+    img.onload = () => {
+      logoImageRef.current = img;
+      renderCanvas();
+    };
+    img.onerror = () => {
+      // Fallback
+      logoImageRef.current = null;
+      renderCanvas();
+    };
+  }, []);
+
+  // Update fields when selecting another registered patient
+  const handleSelectPatientDropdown = (patientId: string) => {
+    setSelectedPatientId(patientId);
+    if (!patientId) {
+      setPacNombre('');
+      setPacRut('');
+      setPacEdad('');
+      return;
+    }
+    const p = patients.find(pat => pat.id === patientId);
+    if (p) {
+      setPacNombre(`${p.firstName} ${p.lastName}`);
+      setPacRut(formatRut(p.documentId));
+      if (p.birthDate) {
+        const birth = new Date(p.birthDate);
+        const age = new Date().getFullYear() - birth.getFullYear();
+        setPacEdad(isNaN(age) ? '' : `${age} años`);
+      } else {
+        setPacEdad('');
       }
     }
-  }, [isOpen, initialItem]);
+  };
 
-  const [notes, setNotes] = useState('Presupuesto válido por 30 días. Incluye controles y garantía clínica.');
-  const [showPrintModal, setShowPrintModal] = useState(false);
-  const [tempBudgetForPrint, setTempBudgetForPrint] = useState<TreatmentBudget | null>(null);
+  // Reset to blank without any preselected data whenever modal opens
+  useEffect(() => {
+    if (isOpen) {
+      setDoctorNombre('');
+      setDoctorEsp('');
+      setSelectedPatientId('');
+      setPacNombre('');
+      setPacRut('');
+      setPacEdad('');
+      setFecha(new Date().toISOString().split('T')[0]);
+      setObservaciones('');
+      setItems([
+        {
+          id: `item-${Date.now()}`,
+          pieza: '',
+          nombre: '',
+          cant: 1,
+          precio: 0
+        }
+      ]);
+    }
+  }, [isOpen]);
 
-  if (!isOpen) return null;
-
-  const currentPatient = patients.find(p => p.id === selectedPatientId) || patients[0];
-  const currentDoctor = doctors.find(d => d.id === selectedDoctorId) || doctors[0];
-  const currentBranch = branches.find(b => b.id === selectedBranchId) || branches[0];
-
-  // Add empty manual row
-  const handleAddEmptyRow = () => {
-    setRows(prev => [
+  // Add Treatment Row
+  const handleAddItem = () => {
+    setItems(prev => [
       ...prev,
       {
-        id: `row-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
-        toothNumber: '',
-        name: '',
-        price: 0,
-        quantity: 1
+        id: `item-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+        pieza: '',
+        nombre: '',
+        cant: 1,
+        precio: 0
       }
     ]);
   };
 
-  // Update row
-  const handleUpdateRow = (id: string, updates: Partial<SimpleTreatmentRow>) => {
-    setRows(prev => prev.map(r => r.id === id ? { ...r, ...updates } : r));
+  // Update Treatment Row
+  const handleUpdateItem = (id: string, updates: Partial<BudgetItemInput>) => {
+    setItems(prev => prev.map(item => item.id === id ? { ...item, ...updates } : item));
   };
 
-  // Remove row
-  const handleRemoveRow = (id: string) => {
-    if (rows.length <= 1) {
-      // Reset the single row to blank with $0 instead of removing it
-      setRows([{
-        id: `row-${Date.now()}`,
-        toothNumber: '',
-        name: '',
-        price: 0,
-        quantity: 1
+  // Remove Treatment Row
+  const handleRemoveItem = (id: string) => {
+    if (items.length <= 1) {
+      setItems([{
+        id: `item-${Date.now()}`,
+        pieza: '',
+        nombre: '',
+        cant: 1,
+        precio: 0
       }]);
       return;
     }
-    setRows(prev => prev.filter(r => r.id !== id));
+    setItems(prev => prev.filter(item => item.id !== id));
   };
 
-  // Calculations (Starts at 0 if prices are 0)
-  const subtotal = rows.reduce((acc, r) => acc + (Math.max(0, Number(r.price) || 0) * Math.max(1, Number(r.quantity) || 1)), 0);
-  const discountAmount = Math.round(subtotal * (Math.max(0, Math.min(100, Number(discountPercent) || 0)) / 100));
-  const totalFinal = Math.max(0, subtotal - discountAmount);
+  // Canvas Real-Time Render Function (Exact Match to User Snippet)
+  const renderCanvas = useCallback(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
 
+    const w = canvas.width;
+    const h = canvas.height;
+
+    // Background
+    ctx.fillStyle = "#FFFFFF";
+    ctx.fillRect(0, 0, w, h);
+
+    // Border
+    ctx.strokeStyle = "#000000";
+    ctx.lineWidth = 3;
+    ctx.strokeRect(0, 0, w, h);
+
+    // Logo on right
+    const logoImg = logoImageRef.current;
+    if (logoImg && logoImg.complete && logoImg.naturalWidth !== 0) {
+      const logoW = 340; 
+      const logoH = (logoImg.naturalHeight / logoImg.naturalWidth) * logoW;
+      ctx.drawImage(logoImg, w - logoW - 40, 30, logoW, logoH);
+    }
+
+    // Top-left header
+    ctx.textAlign = "left";
+    ctx.fillStyle = "#1B2A3D";
+    ctx.font = "bold 20px Georgia, serif";
+    ctx.fillText("Consulta dental Daaron", 50, 60);
+
+    ctx.fillStyle = "#7A7568";
+    ctx.font = "14px sans-serif";
+    ctx.fillText("Maipú 461 edificio Salman local", 50, 82);
+    ctx.fillText("304 piso 3 Linares", 50, 100);
+
+    const docName = doctorNombre || 'Dr(a). Nombre Apellido';
+    const docEspecialidad = doctorEsp || 'Especialidad';
+
+    ctx.fillStyle = "#1B2A3D";
+    ctx.font = "bold 21px Georgia, serif";
+    ctx.fillText(docName, 50, 130);
+
+    ctx.fillStyle = "#7A7568";
+    ctx.font = "15px sans-serif";
+    ctx.fillText(docEspecialidad, 50, 150);
+
+    // Green Divider Line
+    ctx.strokeStyle = "#1F4B44";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(50, 185);
+    ctx.lineTo(w - 50, 185);
+    ctx.stroke();
+
+    // Patient
+    const nombre = pacNombre || '—';
+    const edad = pacEdad;
+    const rut = pacRut || '—';
+    const fechaFmt = formatFecha(fecha);
+
+    ctx.textAlign = "left";
+    ctx.fillStyle = "#7A7568";
+    ctx.font = "bold 12px sans-serif";
+    ctx.fillText("PACIENTE", 50, 215);
+    ctx.fillStyle = "#1B2A3D";
+    ctx.font = "bold 16px sans-serif";
+    ctx.fillText(nombre + (edad ? ` (${edad})` : ''), 50, 237);
+
+    ctx.fillStyle = "#7A7568";
+    ctx.font = "bold 12px sans-serif";
+    ctx.fillText("RUT", 450, 215);
+    ctx.fillStyle = "#1B2A3D";
+    ctx.font = "bold 16px sans-serif";
+    ctx.fillText(rut, 450, 237);
+
+    ctx.fillStyle = "#7A7568";
+    ctx.font = "bold 12px sans-serif";
+    ctx.fillText("FECHA", 620, 215);
+    ctx.fillStyle = "#1B2A3D";
+    ctx.font = "bold 16px sans-serif";
+    ctx.fillText(fechaFmt, 620, 237);
+
+    ctx.strokeStyle = "#D8D2C4";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(50, 245); ctx.lineTo(420, 245);
+    ctx.moveTo(450, 245); ctx.lineTo(600, 245);
+    ctx.moveTo(620, 245); ctx.lineTo(w - 50, 245);
+    ctx.stroke();
+
+    // Title
+    ctx.fillStyle = "#1F4B44";
+    ctx.font = "italic bold 19px Georgia, serif";
+    ctx.fillText("Presupuesto de Tratamiento", 50, 285);
+
+    // Table Header
+    let y = 315;
+    ctx.fillStyle = "#F0F6F4";
+    ctx.fillRect(50, y, w - 100, 30);
+
+    ctx.fillStyle = "#1F4B44";
+    ctx.font = "bold 12px sans-serif";
+    ctx.fillText("ZONA / PIEZA / TRATAMIENTO", 60, y + 20);
+    ctx.textAlign = "center";
+    ctx.fillText("CANT.", 500, y + 20);
+    ctx.textAlign = "right";
+    ctx.fillText("UNITARIO", 630, y + 20);
+    ctx.fillText("TOTAL", w - 60, y + 20);
+
+    y += 40;
+
+    let granTotal = 0;
+    const validItems = items.filter(it => it.nombre.trim().length > 0 || it.precio > 0);
+
+    if (validItems.length === 0) {
+      ctx.textAlign = "left";
+      ctx.fillStyle = "#7A7568";
+      ctx.font = "italic 14px sans-serif";
+      ctx.fillText("Sin detalles agregados...", 60, y + 10);
+      y += 30;
+    } else {
+      validItems.forEach((item) => {
+        const piezaVal = item.pieza;
+        const itemNombre = item.nombre || 'Tratamiento sin especificar';
+        const cant = parseInt(item.cant.toString()) || 1;
+        const precio = parseFloat(item.precio.toString()) || 0;
+        const subtotal = cant * precio;
+        granTotal += subtotal;
+
+        const textoTratamiento = piezaVal ? `[${piezaVal}] ${itemNombre}` : itemNombre;
+
+        ctx.textAlign = "left";
+        ctx.fillStyle = "#1B2A3D";
+        ctx.font = "14px sans-serif";
+        ctx.fillText(textoTratamiento, 60, y);
+
+        ctx.textAlign = "center";
+        ctx.fillText(cant.toString(), 500, y);
+
+        ctx.textAlign = "right";
+        ctx.fillText(formatCLP(precio), 630, y);
+        ctx.fillText(formatCLP(subtotal), w - 60, y);
+
+        y += 12;
+        ctx.strokeStyle = "#EFEBE1";
+        ctx.beginPath();
+        ctx.moveTo(50, y); ctx.lineTo(w - 50, y);
+        ctx.stroke();
+        y += 22;
+      });
+    }
+
+    // Total Line
+    ctx.strokeStyle = "#1F4B44";
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(400, y); ctx.lineTo(w - 50, y);
+    ctx.stroke();
+
+    y += 30;
+    ctx.textAlign = "right";
+    ctx.fillStyle = "#1F4B44";
+    ctx.font = "bold 18px Georgia, serif";
+    ctx.fillText("TOTAL ESTIMADO:", w - 200, y);
+    ctx.fillText(formatCLP(granTotal), w - 60, y);
+
+    // Observations
+    const obs = observaciones;
+    if (obs) {
+      y += 45;
+      ctx.textAlign = "left";
+      ctx.fillStyle = "#7A7568";
+      ctx.font = "bold 12px sans-serif";
+      ctx.fillText("OBSERVACIONES / CONDICIONES:", 50, y);
+      ctx.font = "13px sans-serif";
+      ctx.fillStyle = "#1B2A3D";
+      
+      const words = obs.split(' ');
+      let line = '';
+      let obsY = y + 20;
+      for (let n = 0; n < words.length; n++) {
+        const testLine = line + words[n] + ' ';
+        const metrics = ctx.measureText(testLine);
+        if (metrics.width > 450 && n > 0) {
+          ctx.fillText(line, 50, obsY);
+          line = words[n] + ' ';
+          obsY += 18;
+        } else {
+          line = testLine;
+        }
+      }
+      ctx.fillText(line, 50, obsY);
+    }
+
+    // Signature
+    ctx.textAlign = "center";
+    ctx.strokeStyle = "#1B2A3D";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(w - 270, h - 140);
+    ctx.lineTo(w - 70, h - 140);
+    ctx.stroke();
+
+    ctx.fillStyle = "#7A7568";
+    ctx.font = "bold 12px sans-serif";
+    ctx.fillText("FIRMA Y TIMBRE", w - 170, h - 120);
+
+    // Footer
+    ctx.textAlign = "left";
+    ctx.strokeStyle = "#D8D2C4";
+    ctx.beginPath();
+    ctx.moveTo(50, h - 90);
+    ctx.lineTo(w - 50, h - 90);
+    ctx.stroke();
+
+    ctx.fillStyle = "#7A7568";
+    ctx.font = "bold 12px sans-serif";
+    ctx.fillText("HORARIO DE ATENCIÓN:", 50, h - 65);
+    ctx.font = "13px sans-serif";
+    ctx.fillText("Lunes a viernes 10:00 a 13:00 hrs. / 15:00 a 19:00 hrs. — Sábado 10:00 a 13:00 hrs.", 50, h - 45);
+  }, [doctorNombre, doctorEsp, pacNombre, pacEdad, pacRut, fecha, items, observaciones]);
+
+  // Re-render canvas whenever input states change
+  useEffect(() => {
+    renderCanvas();
+  }, [renderCanvas]);
+
+  if (!isOpen) return null;
+
+  // Build TreatmentBudget domain model for clinical state synchronization
   const buildBudgetData = (): TreatmentBudget => {
-    const validRows = rows.filter(r => r.name.trim().length > 0 || (Number(r.price) > 0));
-    const items: BudgetItem[] = validRows.map((r, idx) => {
-      const rowBase = (Number(r.price) || 0) * (Number(r.quantity) || 1);
-      const rowDiscount = Math.round(rowBase * (discountPercent / 100));
-      const rowTotal = rowBase - rowDiscount;
+    const validItems = items.filter(it => it.nombre.trim().length > 0 || it.precio > 0);
+    const targetPatient = patients.find(p => p.id === selectedPatientId) || defaultPatient || {
+      id: `pat-${Date.now()}`,
+      firstName: pacNombre.split(' ')[0] || 'Paciente',
+      lastName: pacNombre.split(' ').slice(1).join(' ') || 'General',
+      documentId: pacRut || '11.111.111-1',
+      phone: '+56 9 8765 4321',
+      email: 'paciente@consulta.cl',
+      birthDate: '1990-01-01',
+      allergies: [],
+      medicalAlerts: [],
+      anamnesis: { systemicDiseases: [], medications: [], smoker: false, diabetic: false, hypertensive: false, pregnant: false },
+      documents: [],
+      evolutions: [],
+      treatments: [],
+      prescriptions: [],
+      createdAt: new Date().toISOString().split('T')[0]
+    };
+
+    const targetDoctor = doctors.find(d => d.name === doctorNombre) || doctors[0] || {
+      id: 'doc-1',
+      name: doctorNombre,
+      rut: '14.555.666-7',
+      specialty: doctorEsp,
+      phone: '+56 9 1234 5678',
+      email: 'doctor@daaron.cl',
+      branchIds: ['branch-1']
+    };
+
+    const calculatedSubtotal = validItems.reduce((acc, it) => acc + ((Number(it.precio) || 0) * (Number(it.cant) || 1)), 0);
+
+    const budgetItems: BudgetItem[] = validItems.map((it, idx) => {
+      const lineTotal = (Number(it.precio) || 0) * (Number(it.cant) || 1);
       return {
         id: `bi-${Date.now()}-${idx}`,
         tariffItemId: `manual-${idx}`,
         code: `TX-${idx + 1}`,
-        description: r.name.trim() || 'Tratamiento Dental',
-        toothNumber: r.toothNumber && typeof r.toothNumber === 'number' ? r.toothNumber : undefined,
-        quantity: r.quantity || 1,
-        unitPrice: Number(r.price) || 0,
-        discountPercent: discountPercent,
+        description: it.pieza ? `[${it.pieza}] ${it.nombre}` : (it.nombre || 'Tratamiento Dental'),
+        quantity: it.cant || 1,
+        unitPrice: Number(it.precio) || 0,
+        discountPercent: 0,
         insuranceCoverageAmount: 0,
-        patientCopay: rowTotal,
-        total: rowTotal,
+        patientCopay: lineTotal,
+        total: lineTotal,
         status: 'PENDING'
       };
     });
@@ -210,28 +535,46 @@ export const BudgetBuilderModal: React.FC<BudgetBuilderModalProps> = ({
     return {
       id: `bud-${Date.now()}`,
       budgetNumber: `PRE-${Math.floor(1000 + Math.random() * 9000)}`,
-      patientId: currentPatient.id,
-      patientName: `${currentPatient.firstName} ${currentPatient.lastName}`,
-      doctorId: currentDoctor.id,
-      doctorName: currentDoctor.name,
-      branchId: currentBranch.id,
-      createdAt: new Date().toISOString().split('T')[0],
+      patientId: targetPatient.id,
+      patientName: pacNombre || `${targetPatient.firstName} ${targetPatient.lastName}`,
+      doctorId: targetDoctor.id,
+      doctorName: doctorNombre || targetDoctor.name,
+      branchId: branches[0]?.id || 'branch-1',
+      createdAt: fecha || new Date().toISOString().split('T')[0],
       validUntil: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
       status: 'ACCEPTED',
-      items,
-      subtotal,
-      discountTotal: discountAmount,
+      items: budgetItems,
+      subtotal: calculatedSubtotal,
+      discountTotal: 0,
       insuranceTotal: 0,
-      totalPatient: totalFinal,
+      totalPatient: calculatedSubtotal,
       totalPaid: 0,
-      balanceDue: totalFinal,
-      notes
+      balanceDue: calculatedSubtotal,
+      notes: observaciones
     };
   };
 
-  // 1. Guardar y Agregar a la Ficha del Paciente
-  const handleSaveToPatientChart = (e?: React.FormEvent) => {
-    if (e) e.preventDefault();
+  // Download PDF via jsPDF from Canvas (Letter format 8.5 x 11 in)
+  const handleDownloadPdf = () => {
+    renderCanvas();
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const pdf = new jsPDF({
+      orientation: 'portrait',
+      unit: 'in',
+      format: 'letter'
+    });
+
+    const imgData = canvas.toDataURL('image/png');
+    pdf.addImage(imgData, 'PNG', 0, 0, 8.5, 11);
+
+    const pac = pacNombre || 'presupuesto';
+    pdf.save(`Presupuesto_${pac.replace(/\s+/g, '_')}.pdf`);
+  };
+
+  // Save to Clinical Record and DB
+  const handleSaveToClinicalRecord = () => {
     const budget = buildBudgetData();
     if (budget.items.length === 0) {
       alert('Por favor ingresa al menos un tratamiento con precio.');
@@ -241,401 +584,402 @@ export const BudgetBuilderModal: React.FC<BudgetBuilderModalProps> = ({
     onClose();
   };
 
-  // 2. Descargar Presupuesto (PDF)
-  const handleDownloadPDF = () => {
-    const budget = buildBudgetData();
-    if (budget.items.length === 0) {
-      alert('Por favor ingresa al menos un tratamiento.');
-      return;
-    }
-    setTempBudgetForPrint(budget);
-    setShowPrintModal(true);
-  };
-
-  // 3. Enviar por WhatsApp
+  // Share via WhatsApp
   const handleSendWhatsApp = () => {
     const budget = buildBudgetData();
-    if (budget.items.length === 0) {
-      alert('Por favor ingresa al menos un tratamiento.');
-      return;
-    }
-    
-    // Save to chart first if not saved
-    onSaveBudget(budget, false, true);
-
-    const phone = currentPatient.whatsapp || currentPatient.phone || '';
+    const targetPatient = patients.find(p => p.id === selectedPatientId) || defaultPatient;
+    const phone = targetPatient?.whatsapp || targetPatient?.phone || '';
     const cleanPhone = phone.replace(/[^0-9]/g, '');
 
     const itemsList = budget.items
-      .map(i => `• ${i.toothNumber ? `[Pieza ${i.toothNumber}] ` : ''}${i.description} (${i.quantity}x) - $${i.patientCopay.toLocaleString('es-CL')}`)
+      .map(i => `• ${i.description} (${i.quantity}x) - $${i.patientCopay.toLocaleString('es-CL')}`)
       .join('\n');
 
-    const message = `🦷 *PRESUPUESTO ODONTOLÓGICO - CIMA DENTAL*\n\n` +
+    const message = `🦷 *PRESUPUESTO ODONTOLÓGICO — DAARON CONSULTA DENTAL*\n\n` +
       `Estimado(a) *${budget.patientName}*,\n` +
       `Le compartimos el presupuesto para su plan de tratamiento:\n\n` +
       `📋 *N° Presupuesto:* ${budget.budgetNumber}\n` +
-      `👨‍⚕️ *Doctor(a):* ${budget.doctorName}\n` +
-      `📅 *Fecha:* ${budget.createdAt}\n\n` +
-      `📝 *Tratamientos y Piezas Dentales:*\n${itemsList}\n\n` +
-      `💵 *Subtotal:* $${budget.subtotal.toLocaleString('es-CL')}\n` +
-      (budget.discountTotal > 0 ? `🏷️ *Descuento:* -$${budget.discountTotal.toLocaleString('es-CL')}\n` : '') +
-      `💰 *TOTAL A PAGAR:* $${budget.totalPatient.toLocaleString('es-CL')}\n\n` +
-      (budget.notes ? `📌 *Observaciones:* ${budget.notes}\n\n` : '') +
-      `Quedamos a su disposición para resolver dudas o agendar sus horas. ¡Saludos cordiales!`;
+      `👨‍⚕️ *Profesional:* ${budget.doctorName}\n` +
+      `📅 *Fecha:* ${formatFecha(budget.createdAt)}\n\n` +
+      `📝 *Tratamientos Presupuestados:*\n${itemsList}\n\n` +
+      `💰 *TOTAL ESTIMADO:* $${budget.totalPatient.toLocaleString('es-CL')}\n\n` +
+      (budget.notes ? `📌 *Observaciones / Condiciones:* ${budget.notes}\n\n` : '') +
+      `📍 *Ubicación:* Maipú 461 edificio Salman local 304 piso 3 Linares\n` +
+      `Quedamos a su disposición para resolver dudas o agendar sus horas clínicas.`;
 
     const url = cleanPhone
       ? `https://api.whatsapp.com/send?phone=${cleanPhone}&text=${encodeURIComponent(message)}`
       : `https://api.whatsapp.com/send?text=${encodeURIComponent(message)}`;
 
     window.open(url, '_blank');
-    onClose();
   };
 
   return (
-    <>
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in overflow-y-auto">
-        <div className="bg-slate-900 border border-slate-700 w-full max-w-4xl max-h-[94vh] rounded-2xl shadow-2xl p-4 sm:p-6 flex flex-col gap-4 overflow-hidden">
-          
-          {/* Header */}
-          <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-slate-950/85 backdrop-blur-sm overflow-y-auto animate-in fade-in">
+      <div className="bg-[#EFEBE1] text-[#1B2A3D] border border-[#D8D2C4] w-full max-w-[1240px] max-h-[96vh] rounded-2xl shadow-2xl flex flex-col overflow-hidden budget-gen-root">
+        
+        {/* Header Modal Bar */}
+        <div className="bg-[#FFFFFF] border-b border-[#D8D2C4] px-6 py-4 flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <img 
+              src="/L.png" 
+              alt="Daaron Consulta Dental" 
+              className="h-10 w-auto object-contain"
+              onError={(e) => {
+                // Hide if broken
+                (e.target as HTMLElement).style.display = 'none';
+              }}
+            />
             <div>
-              <h3 className="font-bold text-base sm:text-lg text-slate-100 flex items-center gap-2">
-                <DollarSign className="w-5 h-5 text-teal-400" />
-                Presupuesto Dental & Plan de Tratamiento
-              </h3>
-              <p className="text-xs text-slate-400 mt-0.5">
-                Escribe el tratamiento, selecciona la pieza dental y define el precio manual.
+              <h1 className="font-bold text-base sm:text-lg text-[#1F4B44] leading-tight">
+                Generador de Presupuesto PDF — Daaron Consulta Dental
+              </h1>
+              <p className="text-xs text-[#7A7568] mt-0.5">
+                Genera presupuestos dentales en formato Carta Vertical y descárgalos en PDF.
               </p>
             </div>
-            <button
-              type="button"
-              onClick={onClose}
-              className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-all"
-            >
-              <X className="w-5 h-5" />
-            </button>
           </div>
 
-          <form onSubmit={handleSaveToPatientChart} className="flex flex-col gap-4 overflow-y-auto flex-1 pr-1">
+          <button
+            type="button"
+            onClick={onClose}
+            className="p-2 rounded-full bg-[#FCFBF8] hover:bg-[#EFEBE1] text-[#7A7568] hover:text-[#1B2A3D] border border-[#D8D2C4] transition-all cursor-pointer"
+            title="Cerrar ventana"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        {/* Modal Body: Two Column Layout */}
+        <div className="overflow-y-auto p-4 sm:p-6 flex-1">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
             
-            {/* Patient, Doctor & Branch Selector */}
-            <div className="bg-slate-950/80 p-3.5 rounded-xl border border-slate-800 flex flex-col gap-2.5">
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div>
-                  <label className="text-xs font-semibold text-slate-300 block mb-1">
-                    Paciente Destino (Ficha Clínica) *
-                  </label>
-                  <select
-                    value={selectedPatientId}
-                    onChange={(e) => setSelectedPatientId(e.target.value)}
-                    className="w-full bg-slate-900 border border-teal-500/40 rounded-lg p-2 text-xs text-teal-200 focus:outline-none focus:border-teal-400 font-bold"
+            {/* Left Column: Form Panel (420px approx in 12 cols = 5 cols) */}
+            <div className="lg:col-span-5 flex flex-col gap-4">
+              <div className="panel shadow-sm">
+                
+                {/* Professional */}
+                <h2>Profesional</h2>
+                <div className="field">
+                  <label htmlFor="doctorNombre">Nombre del médico / profesional</label>
+                  <select 
+                    id="doctorNombre"
+                    value={doctorNombre}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setDoctorNombre(val);
+                      if (val === 'Dr. Alejandro David') {
+                        setDoctorEsp('Odontólogo general');
+                      } else if (val === 'Dr. Jorge Deluque') {
+                        setDoctorEsp('Ortodoncista');
+                      } else {
+                        const found = doctors.find(d => d.name === val);
+                        if (found) setDoctorEsp(found.specialty);
+                        else if (!val) setDoctorEsp('');
+                      }
+                    }}
                   >
-                    {patients.map(p => (
-                      <option key={p.id} value={p.id}>
-                        {p.firstName} {p.lastName} — RUT: {p.documentId}
-                      </option>
-                    ))}
+                    <option value="">Seleccionar profesional</option>
+                    <option value="Dr. Alejandro David">Dr. Alejandro David</option>
+                    <option value="Dr. Jorge Deluque">Dr. Jorge Deluque</option>
+                    {doctors
+                      .filter(d => d.name !== 'Dr. Alejandro David' && d.name !== 'Dr. Jorge Deluque')
+                      .map(d => (
+                        <option key={d.id} value={d.name}>{d.name}</option>
+                      ))}
                   </select>
                 </div>
 
-                <div>
-                  <label className="text-xs font-semibold text-slate-300 block mb-1">
-                    Profesional Tratante *
-                  </label>
-                  <select
-                    value={selectedDoctorId}
-                    onChange={(e) => setSelectedDoctorId(e.target.value)}
-                    className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-xs text-slate-200 focus:outline-none focus:border-teal-500"
+                <div className="field">
+                  <label htmlFor="doctorEsp">Especialidad</label>
+                  <select 
+                    id="doctorEsp"
+                    value={doctorEsp}
+                    onChange={(e) => setDoctorEsp(e.target.value)}
                   >
-                    {doctors.map(d => (
-                      <option key={d.id} value={d.id}>
-                        {d.name} ({d.specialty})
-                      </option>
-                    ))}
+                    <option value="">Seleccionar especialidad</option>
+                    <option value="Odontólogo general">Odontólogo general</option>
+                    <option value="Ortodoncista">Ortodoncista</option>
+                    <option value="Implantólogo & Rehabilitador">Implantólogo & Rehabilitador</option>
+                    <option value="Endodoncista">Endodoncista</option>
+                    <option value="Odontopediatra">Odontopediatra</option>
+                    <option value="Periodoncista">Periodoncista</option>
                   </select>
                 </div>
 
-                <div>
-                  <label className="text-xs font-semibold text-slate-300 block mb-1">
-                    Sucursal Clínica
-                  </label>
-                  <select
-                    value={selectedBranchId}
-                    onChange={(e) => setSelectedBranchId(e.target.value)}
-                    className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-xs text-slate-200 focus:outline-none focus:border-teal-500"
-                  >
-                    {branches.map(b => (
-                      <option key={b.id} value={b.id}>
-                        {b.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
+                {/* Patient */}
+                <h2 className="section-spacer">Paciente</h2>
 
-              {/* Informational banner reassuring the user */}
-              <div className="flex items-center gap-2 text-[11px] text-teal-400/90 bg-teal-950/40 px-2.5 py-1 rounded-lg border border-teal-500/20">
-                <Check className="w-3.5 h-3.5 text-teal-400 shrink-0" />
-                <span>
-                  Este presupuesto se asociará a la ficha de <strong>{currentPatient.firstName} {currentPatient.lastName}</strong>. Puedes tener múltiples presupuestos acumulados para el mismo paciente sin duplicar su registro.
-                </span>
-              </div>
-            </div>
-
-            {/* Treatments List with FDI Tooth Picker, Manual Description, Quantity & Price */}
-            <div className="bg-slate-900/90 rounded-2xl border border-slate-700/80 p-4 sm:p-5 shadow-inner">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 mb-4 border-b border-slate-800">
-                <div className="flex items-center gap-2">
-                  <div className="w-7 h-7 rounded-lg bg-teal-500/20 border border-teal-500/30 flex items-center justify-center text-teal-400">
-                    <DollarSign className="w-4 h-4" />
+                {/* Patient Quick Selector Helper */}
+                {patients.length > 0 && (
+                  <div className="field">
+                    <label className="flex items-center justify-between">
+                      <span>Cargar datos desde paciente registrado</span>
+                      <span className="text-[10px] text-teal-700 font-normal lowercase">(autocompleta ficha)</span>
+                    </label>
+                    <select
+                      value={selectedPatientId}
+                      onChange={(e) => handleSelectPatientDropdown(e.target.value)}
+                      className="bg-teal-50/50 border-teal-300 font-semibold"
+                    >
+                      <option value="">-- Seleccionar o escribir manualmente --</option>
+                      {patients.map(p => (
+                        <option key={p.id} value={p.id}>
+                          {p.firstName} {p.lastName} — RUT: {p.documentId}
+                        </option>
+                      ))}
+                    </select>
                   </div>
-                  <div>
-                    <h4 className="text-sm font-bold text-white tracking-wide">
-                      Tratamientos & Piezas Dentales
-                    </h4>
-                    <p className="text-[11px] text-slate-400">
-                      Ingresa el número de pieza dental, el tratamiento y el precio correspondiente
-                    </p>
+                )}
+
+                <div className="field">
+                  <label htmlFor="pacNombre">Nombre completo</label>
+                  <input 
+                    type="text" 
+                    id="pacNombre" 
+                    placeholder="Nombre del paciente"
+                    value={pacNombre}
+                    onChange={(e) => setPacNombre(e.target.value)}
+                  />
+                </div>
+
+                <div className="row2">
+                  <div className="field">
+                    <label htmlFor="pacRut">RUT</label>
+                    <input 
+                      type="text" 
+                      id="pacRut" 
+                      placeholder="12.345.678-9"
+                      value={pacRut}
+                      onChange={(e) => setPacRut(formatRut(e.target.value))}
+                    />
+                  </div>
+                  <div className="field">
+                    <label htmlFor="pacEdad">Edad</label>
+                    <input 
+                      type="text" 
+                      id="pacEdad" 
+                      placeholder="Opcional"
+                      value={pacEdad}
+                      onChange={(e) => setPacEdad(e.target.value)}
+                    />
                   </div>
                 </div>
-                <span className="px-2.5 py-1 bg-slate-800 text-teal-300 font-mono text-xs font-bold rounded-lg border border-slate-700 w-fit">
-                  {rows.length} {rows.length === 1 ? 'procedimiento' : 'procedimientos'}
-                </span>
-              </div>
 
-              {/* Rows List */}
-              <div className="flex flex-col gap-4">
-                {rows.map((row, idx) => (
-                  <div 
-                    key={row.id} 
-                    className="p-4 bg-slate-950/90 rounded-xl border border-slate-700/70 hover:border-slate-600 transition-all shadow-md grid grid-cols-12 gap-3.5 items-end"
-                  >
-                    {/* Index Badge */}
-                    <div className="col-span-12 sm:col-span-1 flex items-center justify-between sm:justify-start pb-1 sm:pb-0">
-                      <span className="font-mono font-bold text-teal-400 bg-teal-950/60 px-2.5 py-1 rounded-md border border-teal-500/30 text-xs">
-                        #{idx + 1}
-                      </span>
-                      <span className="sm:hidden text-xs text-slate-400 font-medium">Tratamiento dental</span>
-                    </div>
+                <div className="field">
+                  <label htmlFor="fecha">Fecha</label>
+                  <input 
+                    type="date" 
+                    id="fecha"
+                    value={fecha}
+                    onChange={(e) => setFecha(e.target.value)}
+                  />
+                </div>
 
-                    {/* Tooth Number FDI */}
-                    <div className="col-span-12 sm:col-span-3">
-                      <label className="text-xs font-semibold text-slate-200 block mb-1.5 flex items-center gap-1">
-                        <span>Pieza Dental (N°):</span>
-                      </label>
-                      <div className="flex items-center gap-1.5">
-                        <input
-                          type="number"
-                          placeholder="Ej: 16"
-                          value={row.toothNumber === '' ? '' : row.toothNumber}
-                          onChange={(e) => {
-                            const val = e.target.value === '' ? '' : parseInt(e.target.value);
-                            handleUpdateRow(row.id, { toothNumber: isNaN(val as number) ? '' : val });
-                          }}
-                          className="styled-input text-center font-bold text-slate-900 placeholder:text-slate-400 !h-11 !w-20 shrink-0"
-                          title="Escribe directamente el número de la pieza dental (Ej: 16, 21, 38, 46)"
-                        />
-                        <select
-                          value={row.toothNumber ?? ''}
-                          onChange={(e) => {
-                            const val = e.target.value === '' ? '' : parseInt(e.target.value);
-                            handleUpdateRow(row.id, { toothNumber: isNaN(val as number) ? '' : val });
-                          }}
-                          className="styled-input !h-11 text-xs text-slate-800 !py-0 !px-2 flex-1 min-w-0"
-                        >
-                          {FDI_TOOTH_OPTIONS.map((opt, optIdx) => (
-                            <option key={optIdx} value={opt.value}>
-                              {opt.label}
-                            </option>
-                          ))}
-                        </select>
+                {/* Treatments / Services */}
+                <h2 className="section-spacer">Tratamientos / Servicios</h2>
+                <div id="itemsContainer" className="flex flex-col gap-1">
+                  {items.map((item, index) => (
+                    <div key={item.id} className="item-card">
+                      <span className="item-num">#{index + 1}</span>
+                      <button 
+                        className="item-remove" 
+                        type="button" 
+                        title="Eliminar fila"
+                        onClick={() => handleRemoveItem(item.id)}
+                      >
+                        ✕
+                      </button>
+
+                      <div className="field" style={{ marginBottom: '10px' }}>
+                        <div className="row-item">
+                          <div>
+                            <label>Zona / Pieza</label>
+                            <select 
+                              className="item-pieza"
+                              value={item.pieza}
+                              onChange={(e) => handleUpdateItem(item.id, { pieza: e.target.value })}
+                            >
+                              <option value="">Gral / General</option>
+                              <optgroup label="Zonas / Arcadas">
+                                <option value="Arcada Sup.">Arcada Superior</option>
+                                <option value="Arcada Inf.">Arcada Inferior</option>
+                                <option value="Ambas Arcadas">Ambas Arcadas</option>
+                              </optgroup>
+                              <optgroup label="Cuadrante 1 (Superior Der.)">
+                                <option value="Pieza 1.8">1.8 - Tercer Molar</option>
+                                <option value="Pieza 1.7">1.7 - Segundo Molar</option>
+                                <option value="Pieza 1.6">1.6 - Primer Molar</option>
+                                <option value="Pieza 1.5">1.5 - Segundo Premolar</option>
+                                <option value="Pieza 1.4">1.4 - Primer Premolar</option>
+                                <option value="Pieza 1.3">1.3 - Canino</option>
+                                <option value="Pieza 1.2">1.2 - Incisivo Lateral</option>
+                                <option value="Pieza 1.1">1.1 - Incisivo Central</option>
+                              </optgroup>
+                              <optgroup label="Cuadrante 2 (Superior Izq.)">
+                                <option value="Pieza 2.1">2.1 - Incisivo Central</option>
+                                <option value="Pieza 2.2">2.2 - Incisivo Lateral</option>
+                                <option value="Pieza 2.3">2.3 - Canino</option>
+                                <option value="Pieza 2.4">2.4 - Primer Premolar</option>
+                                <option value="Pieza 2.5">2.5 - Segundo Premolar</option>
+                                <option value="Pieza 2.6">2.6 - Primer Molar</option>
+                                <option value="Pieza 2.7">2.7 - Segundo Molar</option>
+                                <option value="Pieza 2.8">2.8 - Tercer Molar</option>
+                              </optgroup>
+                              <optgroup label="Cuadrante 3 (Inferior Izq.)">
+                                <option value="Pieza 3.1">3.1 - Incisivo Central</option>
+                                <option value="Pieza 3.2">3.2 - Incisivo Lateral</option>
+                                <option value="Pieza 3.3">3.3 - Canino</option>
+                                <option value="Pieza 3.4">3.4 - Primer Premolar</option>
+                                <option value="Pieza 3.5">3.5 - Segundo Premolar</option>
+                                <option value="Pieza 3.6">3.6 - Primer Molar</option>
+                                <option value="Pieza 3.7">3.7 - Segundo Molar</option>
+                                <option value="Pieza 3.8">3.8 - Tercer Molar</option>
+                              </optgroup>
+                              <optgroup label="Cuadrante 4 (Inferior Der.)">
+                                <option value="Pieza 4.8">4.8 - Tercer Molar</option>
+                                <option value="Pieza 4.7">4.7 - Segundo Molar</option>
+                                <option value="Pieza 4.6">4.6 - Primer Molar</option>
+                                <option value="Pieza 4.5">4.5 - Segundo Premolar</option>
+                                <option value="Pieza 4.4">4.4 - Primer Premolar</option>
+                                <option value="Pieza 4.3">4.3 - Canino</option>
+                                <option value="Pieza 4.2">4.2 - Incisivo Lateral</option>
+                                <option value="Pieza 4.1">4.1 - Incisivo Central</option>
+                              </optgroup>
+                              <optgroup label="Dentición Temporal / Niños">
+                                <option value="Pieza 5.5-5.1">Cuadrante 5 (Sup. Der. Temp.)</option>
+                                <option value="Pieza 6.1-6.5">Cuadrante 6 (Sup. Izq. Temp.)</option>
+                                <option value="Pieza 7.1-7.5">Cuadrante 7 (Inf. Izq. Temp.)</option>
+                                <option value="Pieza 8.5-8.1">Cuadrante 8 (Inf. Der. Temp.)</option>
+                              </optgroup>
+                            </select>
+                          </div>
+                          <div>
+                            <label>Tratamiento / Prestación</label>
+                            <input 
+                              type="text" 
+                              className="item-nombre" 
+                              placeholder="Ej: Obturación Resina Composite"
+                              value={item.nombre}
+                              onChange={(e) => handleUpdateItem(item.id, { nombre: e.target.value })}
+                            />
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="row2" style={{ marginBottom: 0 }}>
+                        <div className="field" style={{ marginBottom: 0 }}>
+                          <label>Cant.</label>
+                          <input 
+                            type="number" 
+                            className="item-cant" 
+                            value={item.cant} 
+                            min="1"
+                            onChange={(e) => handleUpdateItem(item.id, { cant: Math.max(1, parseInt(e.target.value) || 1) })}
+                          />
+                        </div>
+                        <div className="field" style={{ marginBottom: 0 }}>
+                          <label>Precio Unit. ($)</label>
+                          <input 
+                            type="number" 
+                            className="item-precio" 
+                            placeholder="35000" 
+                            min="0"
+                            value={item.precio === 0 ? '' : item.precio}
+                            onChange={(e) => handleUpdateItem(item.id, { precio: Math.max(0, parseFloat(e.target.value) || 0) })}
+                          />
+                        </div>
                       </div>
                     </div>
+                  ))}
+                </div>
 
-                    {/* Manual Treatment Name */}
-                    <div className="col-span-12 sm:col-span-4">
-                      <label className="text-xs font-semibold text-slate-200 block mb-1.5">
-                        Nombre del Tratamiento *
-                      </label>
-                      <input
-                        type="text"
-                        required
-                        placeholder="Ej: Obturación composite, Exodoncia, Limpieza..."
-                        value={row.name}
-                        onChange={(e) => handleUpdateRow(row.id, { name: e.target.value })}
-                        className="styled-input text-slate-900 placeholder:text-slate-400 font-medium !h-11"
-                      />
-                    </div>
-
-                    {/* Quantity */}
-                    <div className="col-span-4 sm:col-span-1">
-                      <label className="text-xs font-semibold text-slate-200 block mb-1.5">Cant:</label>
-                      <input
-                        type="number"
-                        min="1"
-                        value={row.quantity}
-                        onChange={(e) => handleUpdateRow(row.id, { quantity: Math.max(1, parseInt(e.target.value) || 1) })}
-                        className="styled-input text-center text-slate-900 font-bold !h-11 !px-1"
-                      />
-                    </div>
-
-                    {/* Manual Price ($ CLP) */}
-                    <div className="col-span-6 sm:col-span-2">
-                      <label className="text-xs font-semibold text-slate-200 block mb-1.5">Precio ($ CLP) *</label>
-                      <input
-                        type="number"
-                        min="0"
-                        step="500"
-                        placeholder="0"
-                        value={row.price === 0 && row.name === '' ? '' : row.price}
-                        onChange={(e) => handleUpdateRow(row.id, { price: Math.max(0, parseInt(e.target.value) || 0) })}
-                        className="styled-input text-slate-900 font-mono font-bold text-sm !h-11 placeholder:text-slate-400"
-                      />
-                    </div>
-
-                    {/* Remove Action */}
-                    <div className="col-span-2 sm:col-span-1 flex justify-center pb-1">
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveRow(row.id)}
-                        className="h-11 w-11 flex items-center justify-center text-slate-400 hover:text-red-400 bg-slate-900 hover:bg-red-950/40 border border-slate-800 hover:border-red-500/40 rounded-lg transition-all"
-                        title="Eliminar este tratamiento"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
-
-                  </div>
-                ))}
-              </div>
-
-              {/* Prominent Button below rows to add a new treatment to the same budget */}
-              <div className="mt-4 pt-3 border-t border-slate-800">
-                <button
+                <button 
+                  className="btn-add flex items-center justify-center gap-1.5 cursor-pointer" 
+                  id="addItem" 
                   type="button"
-                  onClick={handleAddEmptyRow}
-                  className="w-full py-3.5 bg-teal-600/20 hover:bg-teal-600/30 text-teal-300 hover:text-white border-2 border-dashed border-teal-500/50 hover:border-teal-400 rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-all shadow-sm group cursor-pointer"
+                  onClick={handleAddItem}
                 >
-                  <div className="w-6 h-6 rounded-full bg-teal-500/20 group-hover:bg-teal-500 flex items-center justify-center text-teal-300 group-hover:text-white transition-colors">
-                    <Plus className="w-4 h-4" />
-                  </div>
-                  <span>+ Agregar Nuevo Tratamiento a este Presupuesto</span>
+                  <Plus className="w-4 h-4" />
+                  <span>Agregar tratamiento</span>
                 </button>
+
+                <div className="field" style={{ marginTop: '14px' }}>
+                  <label htmlFor="observaciones">Observaciones / Condición de pago</label>
+                  <textarea 
+                    id="observaciones" 
+                    placeholder="Ej: Válido por 30 días. Pago en 3 cuotas..."
+                    value={observaciones}
+                    onChange={(e) => setObservaciones(e.target.value)}
+                  />
+                </div>
+
+                {/* Main Action Buttons */}
+                <div className="flex flex-col gap-2 pt-2">
+                  <button 
+                    className="btn-pdf flex items-center justify-center gap-2 cursor-pointer shadow-md" 
+                    id="downloadPdfBtn" 
+                    type="button"
+                    onClick={handleDownloadPdf}
+                  >
+                    <Download className="w-5 h-5" />
+                    <span>Descargar Presupuesto (PDF)</span>
+                  </button>
+
+                  <div className="grid grid-cols-2 gap-2 pt-1">
+                    <button
+                      type="button"
+                      onClick={handleSaveToClinicalRecord}
+                      className="px-3 py-2.5 rounded-md bg-[#2F6E63] hover:bg-[#1F4B44] text-white text-xs font-bold flex items-center justify-center gap-1.5 transition-all shadow-sm cursor-pointer"
+                      title="Guarda el presupuesto en la ficha del paciente para seguimiento y cobro"
+                    >
+                      <Save className="w-4 h-4" />
+                      <span>Guardar en Ficha</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={handleSendWhatsApp}
+                      className="px-3 py-2.5 rounded-md bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold flex items-center justify-center gap-1.5 transition-all shadow-sm cursor-pointer"
+                      title="Enviar resumen del presupuesto por WhatsApp"
+                    >
+                      <MessageSquare className="w-4 h-4" />
+                      <span>WhatsApp</span>
+                    </button>
+                  </div>
+                </div>
+
               </div>
             </div>
 
-            {/* Totals & Discount */}
-            <div className="bg-slate-950 p-4 rounded-xl border border-slate-800 grid grid-cols-1 sm:grid-cols-2 gap-4 items-center">
-              <div className="flex flex-col gap-2">
+            {/* Right Column: Live Real-Time Canvas Preview Shell (7 cols) */}
+            <div className="lg:col-span-7 flex flex-col gap-3">
+              <div className="flex items-center justify-between px-1">
                 <div className="flex items-center gap-2">
-                  <label className="text-xs font-semibold text-slate-300 whitespace-nowrap">
-                    Descuento Global (%):
-                  </label>
-                  <input
-                    type="number"
-                    min="0"
-                    max="100"
-                    value={discountPercent}
-                    onChange={(e) => setDiscountPercent(Math.max(0, Math.min(100, parseInt(e.target.value) || 0)))}
-                    className="w-20 bg-slate-900 border border-slate-700 rounded-lg p-1.5 text-xs text-amber-300 font-mono text-center font-bold focus:outline-none focus:border-amber-500"
-                  />
-                  <span className="text-xs text-slate-400">%</span>
+                  <FileText className="w-4 h-4 text-[#1F4B44]" />
+                  <span className="text-xs font-bold text-[#1F4B44] uppercase tracking-wider">
+                    Vista Previa en Tiempo Real (Formato Carta Vertical)
+                  </span>
                 </div>
-                <div className="text-xs text-slate-400 space-y-0.5">
-                  <div>Subtotal: <strong className="text-slate-300 font-mono">${subtotal.toLocaleString('es-CL')}</strong></div>
-                  {discountAmount > 0 && (
-                    <div className="text-amber-400">Descuento ({discountPercent}%): <strong className="font-mono">-${discountAmount.toLocaleString('es-CL')}</strong></div>
-                  )}
-                </div>
-              </div>
-
-              <div className="p-3.5 bg-teal-950/60 border border-teal-500/40 rounded-xl text-right flex flex-col items-end justify-center">
-                <span className="text-xs text-teal-300 font-bold uppercase tracking-wider">Total a Pagar Paciente:</span>
-                <span className="text-2xl sm:text-3xl font-black font-mono text-teal-300 mt-0.5">
-                  ${totalFinal.toLocaleString('es-CL')}
+                <span className="text-[11px] text-[#7A7568] bg-[#DDD7C8] px-2 py-0.5 rounded font-mono">
+                  825 × 1068 px
                 </span>
               </div>
-            </div>
 
-            {/* Notes */}
-            <div>
-              <label className="text-xs font-semibold text-slate-300 block mb-1">
-                Condiciones Comerciales y Observaciones
-              </label>
-              <input
-                type="text"
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2.5 text-xs text-slate-200 focus:outline-none focus:border-teal-500"
-                placeholder="Presupuesto válido por 30 días..."
-              />
-            </div>
-
-            {/* Action Buttons Toolbar */}
-            <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-slate-800">
-              
-              <div className="flex flex-wrap items-center gap-2">
-                {/* PDF Download CTA */}
-                <button
-                  type="button"
-                  onClick={handleDownloadPDF}
-                  className="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all"
-                >
-                  <Printer className="w-4 h-4 text-teal-400" />
-                  <span>Descargar / Imprimir PDF</span>
-                </button>
-
-                {/* WhatsApp CTA */}
-                <button
-                  type="button"
-                  onClick={handleSendWhatsApp}
-                  className="px-3.5 py-2 bg-emerald-700/80 hover:bg-emerald-600 text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 shadow-md shadow-emerald-700/20 transition-all"
-                >
-                  <MessageSquare className="w-4 h-4" />
-                  <span>Enviar por WhatsApp</span>
-                </button>
+              <div className="preview-shell">
+                <canvas 
+                  ref={canvasRef} 
+                  id="budgetCanvas" 
+                  width="825" 
+                  height="1068"
+                />
               </div>
-
-              <div className="flex items-center gap-2 ml-auto">
-                <button
-                  type="button"
-                  onClick={onClose}
-                  className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-semibold transition-all"
-                >
-                  Cancelar
-                </button>
-                
-                {/* Main Action: Guardar y Agregar a la Ficha del Paciente */}
-                <button
-                  type="submit"
-                  className="px-5 py-2.5 bg-teal-600 hover:bg-teal-500 text-white rounded-xl text-xs font-bold shadow-lg shadow-teal-600/30 flex items-center gap-2 transition-all"
-                >
-                  <FolderPlus className="w-4 h-4" />
-                  Guardar & Agregar a Ficha del Paciente
-                </button>
-              </div>
-
             </div>
-          </form>
 
+          </div>
         </div>
-      </div>
 
-      {/* Standalone Print Modal */}
-      {showPrintModal && tempBudgetForPrint && (
-        <BudgetPrintModal
-          isOpen={showPrintModal}
-          onClose={() => setShowPrintModal(false)}
-          budget={tempBudgetForPrint}
-          patient={currentPatient}
-          doctor={currentDoctor}
-          branch={currentBranch}
-          onSendWhatsApp={() => {
-            setShowPrintModal(false);
-            handleSendWhatsApp();
-          }}
-        />
-      )}
-    </>
+      </div>
+    </div>
   );
 };

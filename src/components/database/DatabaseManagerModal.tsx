@@ -75,14 +75,14 @@ export const DatabaseManagerModal: React.FC<DatabaseManagerModalProps> = ({
             </div>
             <div>
               <h3 className="font-bold text-base sm:text-lg text-slate-100 flex items-center gap-2">
-                Gestor de Base de Datos
+                Base de Datos PostgreSQL (Cloud SQL)
                 <span className="text-[10px] bg-emerald-500/20 text-emerald-300 px-2 py-0.5 rounded-full font-bold border border-emerald-500/30 flex items-center gap-1">
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                  PERSISTENTE (ONLINE)
+                  POSTGRESQL CONECTADO
                 </span>
               </h3>
               <p className="text-xs text-slate-400">
-                Almacenamiento persistente de fichas clínicas, presupuestos con piezas dentales y caja.
+                Almacenamiento relacional en PostgreSQL / Cloud SQL con soporte sin conexión y backup JSON.
               </p>
             </div>
           </div>

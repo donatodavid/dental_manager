@@ -1,0 +1,89 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 920 310" width="100%" height="100%">
+  <defs>
+    <!-- Outer Gold Frame Metallic Gradient -->
+    <linearGradient id="goldGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#DEAA3F"/>
+      <stop offset="18%" stop-color="#FFF5A6"/>
+      <stop offset="35%" stop-color="#C69125"/>
+      <stop offset="50%" stop-color="#E9BA50"/>
+      <stop offset="72%" stop-color="#FFEAA0"/>
+      <stop offset="88%" stop-color="#B8821B"/>
+      <stop offset="100%" stop-color="#E2B144"/>
+    </linearGradient>
+
+    <!-- Inner Golden Bevel -->
+    <linearGradient id="goldInner" x1="100%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#9E6E18"/>
+      <stop offset="30%" stop-color="#FFEC8E"/>
+      <stop offset="60%" stop-color="#C28C22"/>
+      <stop offset="100%" stop-color="#FFDE72"/>
+    </linearGradient>
+
+    <!-- Teal Background Radial -->
+    <radialGradient id="tealGradient" cx="50%" cy="50%" r="52%" fx="42%" fy="38%">
+      <stop offset="0%" stop-color="#02BAA7"/>
+      <stop offset="45%" stop-color="#009686"/>
+      <stop offset="85%" stop-color="#007568"/>
+      <stop offset="100%" stop-color="#005A50"/>
+    </radialGradient>
+
+    <!-- Magenta Fill Gradient for Daaron text & tooth -->
+    <linearGradient id="magentaGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#D9289F"/>
+      <stop offset="50%" stop-color="#A8187B"/>
+      <stop offset="100%" stop-color="#7C0C59"/>
+    </linearGradient>
+
+    <!-- Drop Shadow Filter -->
+    <filter id="badgeShadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="3" stdDeviation="4" flood-color="#000000" flood-opacity="0.35"/>
+    </filter>
+  </defs>
+
+  <!-- 1. Outer Golden Frame -->
+  <ellipse cx="460" cy="155" rx="448" ry="142" fill="url(#goldGradient)" filter="url(#badgeShadow)"/>
+  <ellipse cx="460" cy="155" rx="432" ry="128" fill="url(#goldInner)"/>
+  
+  <!-- 2. Main Teal Center Oval -->
+  <ellipse cx="460" cy="155" rx="416" ry="116" fill="url(#tealGradient)"/>
+
+  <!-- 3. Stylized Tooth Emblem (Left) -->
+  <g transform="translate(165, 30)">
+    <!-- Yellow glowing left contour -->
+    <path d="M 46,38 C 42,15 78,14 94,30 C 104,42 105,58 98,85 C 92,112 68,155 58,172 C 48,190 34,185 30,168 C 24,142 30,90 30,62 C 30,42 38,40 46,38 Z" 
+          fill="none" stroke="#FFF78A" stroke-width="11" stroke-linecap="round" stroke-linejoin="round"
+          filter="drop-shadow(0 0 5px rgba(255,247,138,0.7))"/>
+    
+    <!-- White outer border for right purple loop -->
+    <path d="M 88,28 C 104,18 138,18 148,40 C 156,58 135,88 126,124 C 119,152 112,180 102,194 C 92,204 78,194 78,175 C 78,155 90,128 92,105 C 94,78 88,64 74,64 C 64,64 60,72 60,82" 
+          fill="none" stroke="#FFFFFF" stroke-width="18" stroke-linecap="round" stroke-linejoin="round"/>
+    
+    <!-- Magenta interior loop -->
+    <path d="M 88,28 C 104,18 138,18 148,40 C 156,58 135,88 126,124 C 119,152 112,180 102,194 C 92,204 78,194 78,175 C 78,155 90,128 92,105 C 94,78 88,64 74,64 C 64,64 60,72 60,82" 
+          fill="none" stroke="url(#magentaGrad)" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+
+  <!-- 4. Typography "Daaron" -->
+  <g transform="translate(325, 178)">
+    <!-- White Background Stroke -->
+    <text x="0" y="0" font-family="'Brush Script MT', 'Pacifico', 'Comic Sans MS', 'Fredoka', 'Quicksand', cursive, sans-serif" 
+          font-size="132" font-weight="900" fill="#FFFFFF" stroke="#FFFFFF" stroke-width="16" stroke-linejoin="round" 
+          letter-spacing="-1">
+      Daaron
+    </text>
+    <!-- Foreground Magenta Text -->
+    <text x="0" y="0" font-family="'Brush Script MT', 'Pacifico', 'Comic Sans MS', 'Fredoka', 'Quicksand', cursive, sans-serif" 
+          font-size="132" font-weight="900" fill="url(#magentaGrad)" letter-spacing="-1">
+      Daaron
+    </text>
+  </g>
+
+  <!-- 5. Subtitle "CONSULTA DENTAL" -->
+  <g transform="translate(460, 240)">
+    <text x="0" y="0" text-anchor="middle" font-family="'Arial Black', 'Montserrat', 'Trebuchet MS', 'Impact', sans-serif" 
+          font-size="30" font-weight="900" fill="#FFFFFF" stroke="#8E0F67" stroke-width="4.5" paint-order="stroke fill" letter-spacing="3"
+          filter="drop-shadow(0 2px 3px rgba(0,0,0,0.45))">
+      CONSULTA DENTAL
+    </text>
+  </g>
+</svg>

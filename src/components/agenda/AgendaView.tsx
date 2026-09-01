@@ -55,7 +55,27 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
   activeRole,
   currentBranchId
 }) => {
-  const [selectedDate, setSelectedDate] = useState<string>('2026-08-28');
+  // Helper to obtain current local date YYYY-MM-DD
+  const getTodayDate = () => {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
+  // Helper to step date safely without timezone issues
+  const stepDate = (current: string, deltaDays: number) => {
+    const [y, m, d] = current.split('-').map(Number);
+    const dateObj = new Date(y, m - 1, d);
+    dateObj.setDate(dateObj.getDate() + deltaDays);
+    const nextY = dateObj.getFullYear();
+    const nextM = String(dateObj.getMonth() + 1).padStart(2, '0');
+    const nextD = String(dateObj.getDate()).padStart(2, '0');
+    return `${nextY}-${nextM}-${nextD}`;
+  };
+
+  const [selectedDate, setSelectedDate] = useState<string>(() => getTodayDate());
   const [selectedDoctorFilter, setSelectedDoctorFilter] = useState<string>('ALL');
   const [selectedStatusFilter, setSelectedStatusFilter] = useState<string>('ALL');
   const [showNewAptModal, setShowNewAptModal] = useState(false);
@@ -126,12 +146,9 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
         <div className="flex items-center gap-2">
           <button
             type="button"
-            onClick={() => {
-              const d = new Date(selectedDate);
-              d.setDate(d.getDate() - 1);
-              setSelectedDate(d.toISOString().split('T')[0]);
-            }}
-            className="p-2 bg-slate-50 hover:bg-slate-100 rounded-full text-slate-700 border border-slate-200 transition-all"
+            onClick={() => setSelectedDate(stepDate(selectedDate, -1))}
+            className="p-2 bg-slate-50 hover:bg-slate-100 rounded-full text-slate-700 border border-slate-200 transition-all cursor-pointer"
+            title="Día Anterior"
           >
             <ChevronLeft className="w-4 h-4" />
           </button>
@@ -148,20 +165,18 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
 
           <button
             type="button"
-            onClick={() => {
-              const d = new Date(selectedDate);
-              d.setDate(d.getDate() + 1);
-              setSelectedDate(d.toISOString().split('T')[0]);
-            }}
-            className="p-2 bg-slate-50 hover:bg-slate-100 rounded-full text-slate-700 border border-slate-200 transition-all"
+            onClick={() => setSelectedDate(stepDate(selectedDate, 1))}
+            className="p-2 bg-slate-50 hover:bg-slate-100 rounded-full text-slate-700 border border-slate-200 transition-all cursor-pointer"
+            title="Día Siguiente"
           >
             <ChevronRight className="w-4 h-4" />
           </button>
 
           <button
             type="button"
-            onClick={() => setSelectedDate('2026-08-28')}
-            className="px-3.5 py-2 bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-bold rounded-full border border-blue-200 transition-all"
+            onClick={() => setSelectedDate(getTodayDate())}
+            className="px-3.5 py-2 bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-bold rounded-full border border-blue-200 transition-all cursor-pointer"
+            title="Ir al Día de Hoy"
           >
             Hoy
           </button>

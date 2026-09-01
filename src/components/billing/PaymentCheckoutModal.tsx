@@ -113,7 +113,7 @@ export const PaymentCheckoutModal: React.FC<PaymentCheckoutModalProps> = ({
               {budget && (
                 <div className="flex justify-between items-center mt-1 text-slate-400">
                   <span>Presupuesto: {budget.budgetNumber}</span>
-                  <span>Saldo Pendiente: <strong className="text-amber-400 font-mono">${budget.balanceDue.toLocaleString('es-CL')}</strong></span>
+                  <span>Saldo Pendiente: <strong className="text-amber-400 font-mono">${(budget?.balanceDue ?? 0).toLocaleString('es-CL')}</strong></span>
                 </div>
               )}
             </div>
@@ -223,7 +223,7 @@ export const PaymentCheckoutModal: React.FC<PaymentCheckoutModalProps> = ({
                 className="px-6 py-2.5 bg-teal-600 hover:bg-teal-500 text-white rounded-xl text-xs font-bold shadow-lg shadow-teal-600/30 flex items-center gap-1.5"
               >
                 <Receipt className="w-4 h-4" />
-                Registrar Cobro (${amount.toLocaleString('es-CL')})
+                Registrar Cobro (${(amount ?? 0).toLocaleString('es-CL')})
               </button>
             </div>
           </form>
@@ -237,7 +237,24 @@ export const PaymentCheckoutModal: React.FC<PaymentCheckoutModalProps> = ({
             </div>
 
             {generatedReceipt && (
-              <div className="bg-slate-950 p-4 rounded-xl border border-slate-800 text-xs flex flex-col gap-2 font-mono">
+              <div className="bg-slate-950 p-5 rounded-2xl border border-slate-800 text-xs flex flex-col gap-3 font-mono">
+                <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                  <div className="flex items-center gap-2.5">
+                    <img 
+                      src="/pagnina.png" 
+                      alt="Daaron Consulta Dental" 
+                      className="h-9 w-auto object-contain"
+                    />
+                    <div>
+                      <span className="font-bold text-slate-100 block font-sans text-xs">DAARON CONSULTA DENTAL</span>
+                      <span className="text-[10px] text-slate-400 font-sans block">Linares — Maipú 461 Loc. 304</span>
+                    </div>
+                  </div>
+                  <span className="text-emerald-400 font-bold bg-emerald-950/80 px-2.5 py-1 rounded-md text-[10px] border border-emerald-500/30">
+                    PAGADO
+                  </span>
+                </div>
+
                 <div className="flex justify-between text-slate-400">
                   <span>N° Comprobante:</span>
                   <span className="font-bold text-slate-200">{generatedReceipt.receiptNumber}</span>
@@ -248,7 +265,7 @@ export const PaymentCheckoutModal: React.FC<PaymentCheckoutModalProps> = ({
                 </div>
                 <div className="flex justify-between text-slate-400">
                   <span>Monto Pagado:</span>
-                  <span className="text-teal-400 font-bold">${generatedReceipt.amount.toLocaleString('es-CL')}</span>
+                  <span className="text-teal-400 font-bold text-sm">${(generatedReceipt?.amount ?? 0).toLocaleString('es-CL')}</span>
                 </div>
                 <div className="flex justify-between text-slate-400">
                   <span>Medio de Pago:</span>

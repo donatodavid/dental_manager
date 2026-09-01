@@ -31,8 +31,14 @@ import {
   FileSpreadsheet,
   MessageSquare,
   FileText,
-  Trash2
+  Trash2,
+  RotateCcw,
+  Download,
+  AlertTriangle,
+  Loader2,
+  X
 } from 'lucide-react';
+import { downloadBudgetPdf } from '../../utils/budgetExporter';
 
 interface BillingDashboardProps {
   budgets: TreatmentBudget[];
@@ -46,6 +52,7 @@ interface BillingDashboardProps {
   onDeleteBudget?: (budgetId: string) => void;
   onProcessPayment: (payment: PaymentTransaction) => void;
   onUpdateCashSession: (session: CashRegisterSession) => void;
+  onResetMonthlyEarnings?: () => void;
   activeRole: UserRole;
   currentBranchId: string;
 }
@@ -62,6 +69,7 @@ export const BillingDashboard: React.FC<BillingDashboardProps> = ({
   onDeleteBudget,
   onProcessPayment,
   onUpdateCashSession,
+  onResetMonthlyEarnings,
   activeRole,
   currentBranchId
 }) => {
@@ -72,6 +80,8 @@ export const BillingDashboard: React.FC<BillingDashboardProps> = ({
   const [selectedBudgetForPayment, setSelectedBudgetForPayment] = useState<TreatmentBudget | undefined>(undefined);
   const [selectedPatientForPayment, setSelectedPatientForPayment] = useState<Patient | undefined>(undefined);
   const [showCashRegisterModal, setShowCashRegisterModal] = useState(false);
+  const [showResetConfirmModal, setShowResetConfirmModal] = useState(false);
+  const [downloadingBudgetId, setDownloadingBudgetId] = useState<string | null>(null);
 
   // Print & WhatsApp Modals
   const [selectedBudgetForPrint, setSelectedBudgetForPrint] = useState<TreatmentBudget | null>(null);
@@ -118,6 +128,21 @@ export const BillingDashboard: React.FC<BillingDashboardProps> = ({
     setShowPaymentModal(true);
   };
 
+  // Direct download budget handler
+  const handleDirectDownloadBudget = async (budget: TreatmentBudget) => {
+    try {
+      setDownloadingBudgetId(budget.id);
+      const patientObj = patients.find(p => p.id === budget.patientId);
+      const doctorObj = doctors.find(d => d.id === budget.doctorId);
+      await downloadBudgetPdf(budget, patientObj, doctorObj);
+    } catch (err) {
+      console.error('Error downloading budget:', err);
+      setSelectedBudgetForPrint(budget);
+    } finally {
+      setDownloadingBudgetId(null);
+    }
+  };
+
   // WhatsApp quick share handler
   const handleSendWhatsApp = (budget: TreatmentBudget) => {
     const patient = patients.find(p => p.id === budget.patientId);
@@ -128,7 +153,7 @@ export const BillingDashboard: React.FC<BillingDashboardProps> = ({
       .map(i => `• ${i.toothNumber ? `[Pieza ${i.toothNumber}] ` : ''}${i.description} (${i.quantity}x) - $${i.patientCopay.toLocaleString('es-CL')}`)
       .join('\n');
 
-    const message = `🦷 *PRESUPUESTO ODONTOLÓGICO - CIMA DENTAL*\n\n` +
+    const message = `🦷 *PRESUPUESTO ODONTOLÓGICO - DAARON CONSULTA DENTAL*\n\n` +
       `Estimado(a) *${budget.patientName}*,\n` +
       `Le adjuntamos el detalle de su presupuesto dental:\n\n` +
       `📋 *N° Presupuesto:* ${budget.budgetNumber}\n` +
@@ -148,6 +173,13 @@ export const BillingDashboard: React.FC<BillingDashboardProps> = ({
     window.open(url, '_blank');
   };
 
+  const handleConfirmResetEarnings = () => {
+    if (onResetMonthlyEarnings) {
+      onResetMonthlyEarnings();
+    }
+    setShowResetConfirmModal(false);
+  };
+
   return (
     <div className="flex flex-col gap-6 font-sans">
       
@@ -158,17 +190,41 @@ export const BillingDashboard: React.FC<BillingDashboardProps> = ({
         <div className="bg-white p-5 rounded-3xl border border-slate-200/90 shadow-[0_4px_20px_rgba(0,0,0,0.03)] flex flex-col justify-between">
           <div className="flex items-center justify-between text-slate-500 text-xs font-semibold">
             <span>Ingresos Recaudados (Mes)</span>
-            <div className="p-2 bg-emerald-50 text-emerald-600 rounded-2xl">
-              <TrendingUp className="w-4 h-4" />
+            <div className="flex items-center gap-1.5">
+              {activeRole !== 'PATIENT' && onResetMonthlyEarnings && (
+                <button
+                  type="button"
+                  onClick={() => setShowResetConfirmModal(true)}
+                  className="p-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-xl text-[11px] font-bold flex items-center gap-1 transition-all cursor-pointer"
+                  title="Reiniciar las ganancias del mes"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                  <span className="hidden xl:inline">Reiniciar</span>
+                </button>
+              )}
+              <div className="p-2 bg-emerald-50 text-emerald-600 rounded-2xl">
+                <TrendingUp className="w-4 h-4" />
+              </div>
             </div>
           </div>
           <div className="mt-3">
             <span className="text-2xl font-black font-mono text-slate-900">
-              ${totalRevenue.toLocaleString('es-CL')}
+              ${(totalRevenue ?? 0).toLocaleString('es-CL')}
             </span>
-            <span className="text-[11px] text-slate-400 block mt-0.5 font-medium">
-              {payments.length} transacciones registradas
-            </span>
+            <div className="flex items-center justify-between mt-0.5">
+              <span className="text-[11px] text-slate-400 font-medium">
+                {payments.length} transacciones registradas
+              </span>
+              {activeRole !== 'PATIENT' && onResetMonthlyEarnings && payments.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setShowResetConfirmModal(true)}
+                  className="text-[10px] text-rose-600 hover:text-rose-800 font-bold underline cursor-pointer"
+                >
+                  Reiniciar mes
+                </button>
+              )}
+            </div>
           </div>
         </div>
 
@@ -182,7 +238,7 @@ export const BillingDashboard: React.FC<BillingDashboardProps> = ({
           </div>
           <div className="mt-3">
             <span className="text-2xl font-black font-mono text-amber-700">
-              ${totalOutstanding.toLocaleString('es-CL')}
+              ${(totalOutstanding ?? 0).toLocaleString('es-CL')}
             </span>
             <span className="text-[11px] text-slate-400 block mt-0.5 font-medium">
               En tratamientos activos
@@ -200,7 +256,7 @@ export const BillingDashboard: React.FC<BillingDashboardProps> = ({
           </div>
           <div className="mt-3">
             <span className="text-2xl font-black font-mono text-slate-900">
-              ${totalBudgetsValue.toLocaleString('es-CL')}
+              ${(totalBudgetsValue ?? 0).toLocaleString('es-CL')}
             </span>
             <span className="text-[11px] text-slate-400 block mt-0.5 font-medium">
               {budgets.length} planes emitidos
@@ -223,10 +279,10 @@ export const BillingDashboard: React.FC<BillingDashboardProps> = ({
           </div>
           <div className="mt-3">
             <span className="text-2xl font-black font-mono text-emerald-700">
-              ${cashSession.expectedCashTotal.toLocaleString('es-CL')}
+              ${(cashSession?.expectedCashTotal ?? cashSession?.openingCash ?? 0).toLocaleString('es-CL')}
             </span>
             <span className="text-[11px] text-slate-400 block mt-0.5 font-medium">
-              Estado: <strong className="text-emerald-700">{cashSession.status}</strong>
+              Estado: <strong className="text-emerald-700">{cashSession?.status || 'OPEN'}</strong>
             </span>
           </div>
         </div>
@@ -377,18 +433,33 @@ export const BillingDashboard: React.FC<BillingDashboardProps> = ({
                       <button
                         type="button"
                         onClick={() => handleSendWhatsApp(b)}
-                        className="p-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-full text-xs transition-all"
+                        className="p-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-full text-xs transition-all cursor-pointer"
                         title="Enviar por WhatsApp al Paciente"
                       >
                         <MessageSquare className="w-4 h-4" />
                       </button>
 
-                      {/* Download / Print PDF */}
+                      {/* Direct Download PDF */}
+                      <button
+                        type="button"
+                        onClick={() => handleDirectDownloadBudget(b)}
+                        disabled={downloadingBudgetId === b.id}
+                        className="p-2 bg-teal-50 hover:bg-teal-100 disabled:opacity-50 text-teal-700 border border-teal-200 rounded-full text-xs transition-all cursor-pointer"
+                        title="Descargar Presupuesto Oficial (PDF)"
+                      >
+                        {downloadingBudgetId === b.id ? (
+                          <Loader2 className="w-4 h-4 animate-spin text-teal-600" />
+                        ) : (
+                          <Download className="w-4 h-4 text-teal-600" />
+                        )}
+                      </button>
+
+                      {/* Print / View Modal */}
                       <button
                         type="button"
                         onClick={() => setSelectedBudgetForPrint(b)}
-                        className="p-2 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 rounded-full text-xs transition-all"
-                        title="Descargar / Imprimir Presupuesto (PDF)"
+                        className="p-2 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 rounded-full text-xs transition-all cursor-pointer"
+                        title="Ver / Imprimir Presupuesto"
                       >
                         <Printer className="w-4 h-4 text-blue-600" />
                       </button>
@@ -414,7 +485,7 @@ export const BillingDashboard: React.FC<BillingDashboardProps> = ({
                         <button
                           type="button"
                           onClick={() => handleOpenPaymentForBudget(b)}
-                          className="py-1.5 px-3.5 bg-slate-900 hover:bg-slate-800 text-white rounded-full text-xs font-bold flex items-center gap-1.5 shadow-sm transition-all"
+                          className="py-1.5 px-3.5 bg-slate-900 hover:bg-slate-800 text-white rounded-full text-xs font-bold flex items-center gap-1.5 shadow-sm transition-all cursor-pointer"
                         >
                           <CreditCard className="w-3.5 h-3.5" />
                           <span>Cobrar</span>
@@ -437,66 +508,164 @@ export const BillingDashboard: React.FC<BillingDashboardProps> = ({
 
         {/* Tab 2: Historial de Cobros y Comprobantes */}
         {activeTab === 'PAYMENTS' && (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
-              <thead className="bg-slate-50 text-slate-500 uppercase tracking-wider font-semibold border-b border-slate-200">
-                <tr>
-                  <th className="p-4">N° Comprobante</th>
-                  <th className="p-4">Paciente</th>
-                  <th className="p-4">Fecha & Hora</th>
-                  <th className="p-4">Concepto</th>
-                  <th className="p-4">Medio de Pago</th>
-                  <th className="p-4 text-right">Monto (CLP)</th>
-                  <th className="p-4 text-center">Acciones</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 text-slate-700">
-                {filteredPayments.map(pay => (
-                  <tr key={pay.id} className="hover:bg-slate-50/80 transition-colors">
-                    <td className="p-4 font-mono font-bold text-blue-600">
-                      {pay.receiptNumber}
-                    </td>
-                    <td className="p-4 font-bold text-slate-900">
-                      {pay.patientName}
-                    </td>
-                    <td className="p-4 text-slate-500 font-mono">
-                      {pay.date} {pay.time}
-                    </td>
-                    <td className="p-4 max-w-xs truncate text-slate-600 font-medium">
-                      {pay.concept}
-                    </td>
-                    <td className="p-4">
-                      <span className="px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-700 border border-slate-200 text-[11px] font-mono font-semibold">
-                        {pay.paymentMethod}
-                      </span>
-                    </td>
-                    <td className="p-4 text-right font-mono font-black text-slate-900 text-sm">
-                      ${pay.amount.toLocaleString('es-CL')}
-                    </td>
-                    <td className="p-4 text-center">
-                      <button
-                        type="button"
-                        onClick={() => window.print()}
-                        className="p-1.5 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-700"
-                        title="Reimprimir Comprobante"
-                      >
-                        <Printer className="w-4 h-4" />
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-
-            {filteredPayments.length === 0 && (
-              <div className="p-8 text-center text-slate-400 text-xs">
-                No hay transacciones registradas para este criterio.
+          <div className="flex flex-col">
+            {/* Payments Toolbar with Reset Monthly Earnings */}
+            <div className="px-4 py-3 bg-slate-50 border-b border-slate-200/80 flex flex-wrap items-center justify-between gap-3 text-xs">
+              <div className="flex items-center gap-2">
+                <span className="font-semibold text-slate-700">Resumen Contable del Periodo:</span>
+                <span className="font-mono font-bold text-slate-900 bg-white px-2.5 py-1 rounded-full border border-slate-200">
+                  Total Recaudado: ${totalRevenue.toLocaleString('es-CL')}
+                </span>
+                <span className="text-slate-500 font-mono">
+                  ({filteredPayments.length} comprobantes)
+                </span>
               </div>
-            )}
+
+              {activeRole !== 'PATIENT' && onResetMonthlyEarnings && (
+                <button
+                  type="button"
+                  onClick={() => setShowResetConfirmModal(true)}
+                  className="px-3.5 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-full text-xs font-bold flex items-center gap-1.5 transition-all shadow-2xs cursor-pointer"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                  <span>Reiniciar las ganancias del mes</span>
+                </button>
+              )}
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-slate-50/80 text-slate-500 uppercase tracking-wider font-semibold border-b border-slate-200">
+                  <tr>
+                    <th className="p-4">N° Comprobante</th>
+                    <th className="p-4">Paciente</th>
+                    <th className="p-4">Fecha & Hora</th>
+                    <th className="p-4">Concepto</th>
+                    <th className="p-4">Medio de Pago</th>
+                    <th className="p-4 text-right">Monto (CLP)</th>
+                    <th className="p-4 text-center">Acciones</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 text-slate-700">
+                  {filteredPayments.map(pay => (
+                    <tr key={pay.id} className="hover:bg-slate-50/80 transition-colors">
+                      <td className="p-4 font-mono font-bold text-blue-600">
+                        {pay.receiptNumber}
+                      </td>
+                      <td className="p-4 font-bold text-slate-900">
+                        {pay.patientName}
+                      </td>
+                      <td className="p-4 text-slate-500 font-mono">
+                        {pay.date} {pay.time}
+                      </td>
+                      <td className="p-4 max-w-xs truncate text-slate-600 font-medium">
+                        {pay.concept}
+                      </td>
+                      <td className="p-4">
+                        <span className="px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-700 border border-slate-200 text-[11px] font-mono font-semibold">
+                          {pay.paymentMethod}
+                        </span>
+                      </td>
+                      <td className="p-4 text-right font-mono font-black text-slate-900 text-sm">
+                        ${pay.amount.toLocaleString('es-CL')}
+                      </td>
+                      <td className="p-4 text-center">
+                        <button
+                          type="button"
+                          onClick={() => window.print()}
+                          className="p-1.5 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-700 cursor-pointer"
+                          title="Reimprimir Comprobante"
+                        >
+                          <Printer className="w-4 h-4" />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+
+              {filteredPayments.length === 0 && (
+                <div className="p-8 text-center text-slate-400 text-xs">
+                  No hay transacciones registradas para este criterio.
+                </div>
+              )}
+            </div>
           </div>
         )}
 
       </div>
+
+      {/* MODAL: Confirmación de Reinicio de Ganancias del Mes */}
+      {showResetConfirmModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-xs animate-in fade-in">
+          <div className="bg-white rounded-3xl border border-slate-200 max-w-md w-full p-6 shadow-2xl flex flex-col gap-4">
+            
+            <div className="flex items-start justify-between gap-3">
+              <div className="p-3 bg-rose-50 text-rose-600 rounded-2xl border border-rose-200">
+                <AlertTriangle className="w-6 h-6" />
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowResetConfirmModal(false)}
+                className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-full transition-all cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div>
+              <h3 className="text-lg font-black text-slate-900">
+                ¿Reiniciar las ganancias del mes?
+              </h3>
+              <p className="text-xs text-slate-500 mt-1.5 leading-relaxed">
+                Estás a punto de restablecer el acumulado de ingresos y ganancias mensuales a <strong>$0 CLP</strong> para comenzar un nuevo ciclo de facturación.
+              </p>
+            </div>
+
+            {/* Current Month Statistics Summary Box */}
+            <div className="bg-slate-50 border border-slate-200/90 rounded-2xl p-4 text-xs flex flex-col gap-2">
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                Registros a reiniciar:
+              </span>
+              <div className="flex justify-between items-center text-slate-700">
+                <span>Total de ingresos acumulados:</span>
+                <span className="font-mono font-black text-rose-600 text-sm">
+                  ${totalRevenue.toLocaleString('es-CL')} CLP
+                </span>
+              </div>
+              <div className="flex justify-between items-center text-slate-700">
+                <span>Transacciones y comprobantes:</span>
+                <span className="font-mono font-bold text-slate-900">
+                  {payments.length} transacciones
+                </span>
+              </div>
+            </div>
+
+            <p className="text-[11px] text-amber-800 bg-amber-50 p-3 rounded-xl border border-amber-200/90 leading-tight">
+              ⚠️ Esta acción eliminará el historial de pagos del mes en el módulo de Cobro para reiniciar el contador contable.
+            </p>
+
+            <div className="flex items-center justify-end gap-2.5 pt-2">
+              <button
+                type="button"
+                onClick={() => setShowResetConfirmModal(false)}
+                className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-2xl text-xs transition-all cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmResetEarnings}
+                className="px-4 py-2.5 bg-rose-600 hover:bg-rose-700 text-white font-bold rounded-2xl text-xs shadow-md shadow-rose-600/20 transition-all flex items-center gap-1.5 cursor-pointer"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+                <span>Confirmar y Reiniciar</span>
+              </button>
+            </div>
+
+          </div>
+        </div>
+      )}
 
       {/* MODAL: Creador de Presupuestos */}
       <BudgetBuilderModal

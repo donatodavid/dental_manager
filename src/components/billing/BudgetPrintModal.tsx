@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { TreatmentBudget, Patient, ProfessionalDoctor, Branch } from '../../types/clinical';
-import { X, Printer, Download, MessageSquare, Share2, CheckCircle2, DollarSign, Calendar, User, Phone, MapPin, Building2, Trash2 } from 'lucide-react';
+import { X, Printer, Download, MessageSquare, Share2, CheckCircle2, DollarSign, Calendar, User, Phone, MapPin, Building2, Trash2, Loader2, Image as ImageIcon } from 'lucide-react';
+import { downloadBudgetPdf, downloadBudgetPng } from '../../utils/budgetExporter';
 
 interface BudgetPrintModalProps {
   budget: TreatmentBudget | null;
@@ -23,10 +24,36 @@ export const BudgetPrintModal: React.FC<BudgetPrintModalProps> = ({
   onSendWhatsApp,
   onDeleteBudget
 }) => {
+  const [isDownloading, setIsDownloading] = useState(false);
+
   if (!isOpen || !budget) return null;
 
   const handlePrint = () => {
     window.print();
+  };
+
+  const handleDownloadPdf = async () => {
+    try {
+      setIsDownloading(true);
+      await downloadBudgetPdf(budget, patient, doctor);
+    } catch (err) {
+      console.error('Error downloading budget PDF:', err);
+      // Fallback to print dialog
+      window.print();
+    } finally {
+      setIsDownloading(false);
+    }
+  };
+
+  const handleDownloadPng = async () => {
+    try {
+      setIsDownloading(true);
+      await downloadBudgetPng(budget, patient, doctor);
+    } catch (err) {
+      console.error('Error downloading budget PNG:', err);
+    } finally {
+      setIsDownloading(false);
+    }
   };
 
   const handleDelete = () => {
@@ -48,7 +75,7 @@ export const BudgetPrintModal: React.FC<BudgetPrintModalProps> = ({
         .map(i => `• ${i.toothNumber ? `[Pieza ${i.toothNumber}] ` : ''}${i.description} (${i.quantity}x) - $${i.patientCopay.toLocaleString('es-CL')}`)
         .join('\n');
 
-      const message = `🦷 *PRESUPUESTO ODONTOLÓGICO - CIMA DENTAL*\n\n` +
+      const message = `🦷 *PRESUPUESTO ODONTOLÓGICO - DAARON CONSULTA DENTAL*\n\n` +
         `Estimado(a) *${budget.patientName}*,\n` +
         `Adjuntamos el detalle de su plan de tratamiento y presupuesto:\n\n` +
         `📋 *N° Presupuesto:* ${budget.budgetNumber}\n` +
@@ -84,30 +111,53 @@ export const BudgetPrintModal: React.FC<BudgetPrintModalProps> = ({
                 Presupuesto Odontológico Oficial {budget.budgetNumber}
               </h3>
               <p className="text-xs text-slate-400">
-                Vista de impresión y descarga lista para entregar al paciente.
+                Daaron Consulta Dental — Linares. Emisión, descarga en PDF e impresión oficial.
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             {/* WhatsApp CTA */}
             <button
               type="button"
               onClick={handleShareWhatsApp}
-              className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-md shadow-emerald-600/20 transition-all"
+              className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-md shadow-emerald-600/20 transition-all cursor-pointer"
             >
               <MessageSquare className="w-4 h-4" />
-              <span>Enviar por WhatsApp</span>
+              <span className="hidden sm:inline">WhatsApp</span>
             </button>
 
-            {/* Print / Download PDF CTA */}
+            {/* Direct Download PDF CTA (Exact match to platform generation) */}
+            <button
+              type="button"
+              onClick={handleDownloadPdf}
+              disabled={isDownloading}
+              className="px-4 py-2 bg-teal-600 hover:bg-teal-500 disabled:opacity-50 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-md shadow-teal-600/20 transition-all cursor-pointer"
+              title="Descargar Presupuesto Oficial en PDF con formato exacto"
+            >
+              {isDownloading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+              <span>Descargar Presupuesto (PDF)</span>
+            </button>
+
+            {/* Direct Download PNG CTA */}
+            <button
+              type="button"
+              onClick={handleDownloadPng}
+              disabled={isDownloading}
+              className="p-2 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-xl text-xs font-bold border border-slate-700 transition-all cursor-pointer"
+              title="Descargar Presupuesto como Imagen (PNG)"
+            >
+              <ImageIcon className="w-4 h-4" />
+            </button>
+
+            {/* Print CTA */}
             <button
               type="button"
               onClick={handlePrint}
-              className="px-4 py-2 bg-teal-600 hover:bg-teal-500 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-md shadow-teal-600/20 transition-all"
+              className="p-2 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-xl text-xs font-bold border border-slate-700 transition-all cursor-pointer"
+              title="Imprimir documento en impresora"
             >
               <Printer className="w-4 h-4" />
-              <span>Descargar / Imprimir PDF</span>
             </button>
 
             {/* Delete Budget CTA */}
@@ -127,7 +177,7 @@ export const BudgetPrintModal: React.FC<BudgetPrintModalProps> = ({
             <button
               type="button"
               onClick={onClose}
-              className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-xl transition-all"
+              className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-xl transition-all cursor-pointer"
             >
               <X className="w-5 h-5" />
             </button>
@@ -138,30 +188,33 @@ export const BudgetPrintModal: React.FC<BudgetPrintModalProps> = ({
         <div className="p-6 sm:p-10 overflow-y-auto flex-1 bg-white text-slate-800 text-xs font-sans print:p-0 print:m-0">
           
           {/* Header Banner */}
-          <div className="flex items-start justify-between border-b-2 border-teal-600 pb-5 mb-6">
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="w-8 h-8 rounded-lg bg-teal-600 text-white flex items-center justify-center font-black text-lg">
-                  C
-                </span>
-                <div>
-                  <h1 className="text-xl sm:text-2xl font-black text-teal-800 tracking-tight">
-                    CIMA DENTAL & MEDICAL
-                  </h1>
-                  <p className="text-[11px] text-slate-500 font-semibold tracking-wider uppercase">
-                    Centro Odontológico & Especialidades Clínicas
-                  </p>
+          <div className="flex items-start justify-between border-b-2 border-teal-700 pb-5 mb-6">
+            <div className="flex items-start gap-4">
+              <img 
+                src="/pagnina.png" 
+                alt="Daaron Consulta Dental" 
+                className="h-16 w-auto object-contain"
+                onError={(e) => {
+                  (e.target as HTMLElement).style.display = 'none';
+                }}
+              />
+              <div>
+                <h1 className="text-xl sm:text-2xl font-black text-teal-900 tracking-tight">
+                  DAARON CONSULTA DENTAL
+                </h1>
+                <p className="text-[11px] text-slate-500 font-semibold tracking-wider uppercase">
+                  Centro Odontológico & Especialidades Clínicas
+                </p>
+                <div className="text-[11px] text-slate-600 mt-1.5 space-y-0.5">
+                  <p>Maipú 461, Edificio Salman, Local 304, Piso 3, Linares</p>
+                  <p>Tel: +56 9 8408 5590 | Horario: Lun a Vie 09:00 - 19:00</p>
                 </div>
-              </div>
-              <div className="text-[11px] text-slate-500 mt-2 space-y-0.5">
-                <p>{branch?.address || 'Av. Providencia 1208, Piso 5'}, {branch?.city || 'Santiago'}</p>
-                <p>Tel: {branch?.phone || '+56 2 2345 6789'} | Email: contacto@cimacloud.dental</p>
               </div>
             </div>
 
             <div className="text-right">
-              <div className="inline-block bg-teal-50 border border-teal-200 rounded-xl p-3 text-right">
-                <span className="text-[10px] uppercase font-bold text-teal-700 tracking-wider block">
+              <div className="inline-block bg-teal-50/80 border border-teal-200 rounded-xl p-3 text-right">
+                <span className="text-[10px] uppercase font-bold text-teal-800 tracking-wider block">
                   PRESUPUESTO ODONTOLÓGICO
                 </span>
                 <span className="text-lg sm:text-xl font-mono font-black text-slate-900 block mt-0.5">
@@ -245,10 +298,10 @@ export const BudgetPrintModal: React.FC<BudgetPrintModalProps> = ({
                         {item.quantity || 1}
                       </td>
                       <td className="py-2.5 px-3 text-right font-mono text-slate-700">
-                        ${item.unitPrice.toLocaleString('es-CL')}
+                        ${(item?.unitPrice ?? 0).toLocaleString('es-CL')}
                       </td>
                       <td className="py-2.5 px-3 text-right font-mono font-bold text-slate-900">
-                        ${item.patientCopay.toLocaleString('es-CL')}
+                        ${(item?.patientCopay ?? 0).toLocaleString('es-CL')}
                       </td>
                     </tr>
                   ))}
@@ -267,18 +320,18 @@ export const BudgetPrintModal: React.FC<BudgetPrintModalProps> = ({
             <div className="w-full sm:w-72 bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-1.5 text-xs">
               <div className="flex justify-between text-slate-600">
                 <span>Subtotal Tratamientos:</span>
-                <span className="font-mono font-semibold">${budget.subtotal.toLocaleString('es-CL')}</span>
+                <span className="font-mono font-semibold">${(budget?.subtotal ?? 0).toLocaleString('es-CL')}</span>
               </div>
-              {budget.discountTotal > 0 && (
+              {(budget?.discountTotal ?? 0) > 0 && (
                 <div className="flex justify-between text-amber-700 font-semibold">
                   <span>Descuento Aplicado:</span>
-                  <span className="font-mono">-${budget.discountTotal.toLocaleString('es-CL')}</span>
+                  <span className="font-mono">-${(budget?.discountTotal ?? 0).toLocaleString('es-CL')}</span>
                 </div>
               )}
               <div className="pt-2 border-t-2 border-teal-600 flex justify-between items-baseline text-slate-900">
                 <span className="font-black uppercase text-sm">TOTAL A PAGAR:</span>
                 <span className="font-mono font-black text-xl text-teal-800">
-                  ${budget.totalPatient.toLocaleString('es-CL')}
+                  ${(budget?.totalPatient ?? 0).toLocaleString('es-CL')}
                 </span>
               </div>
             </div>

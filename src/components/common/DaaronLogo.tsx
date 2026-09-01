@@ -12,7 +12,7 @@ export const DaaronLogo: React.FC<DaaronLogoProps> = ({
 }) => {
   return (
     <img 
-      src="/L.png" 
+      src="/pagnina.png" 
       alt="Daaron Consulta Dental" 
       className={`${className} object-contain transition-transform hover:scale-105`}
       onError={(e) => {

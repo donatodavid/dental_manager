@@ -598,6 +598,23 @@ export const INITIAL_PATIENTS: Patient[] = [
   }
 ];
 
+const getTodayIso = () => {
+  const d = new Date();
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+const getFutureIso = (days: number) => {
+  const d = new Date();
+  d.setDate(d.getDate() + days);
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
 export const INITIAL_APPOINTMENTS: Appointment[] = [
   {
     id: 'apt-1',
@@ -610,7 +627,7 @@ export const INITIAL_APPOINTMENTS: Appointment[] = [
     branchId: 'branch-1',
     branchName: 'Sucursal Maipú (Edificio Salman)',
     boxNumber: 'Box 02',
-    date: '2026-08-28',
+    date: getTodayIso(),
     startTime: '09:30',
     endTime: '10:30',
     durationMinutes: 60,
@@ -636,7 +653,7 @@ export const INITIAL_APPOINTMENTS: Appointment[] = [
     branchId: 'branch-1',
     branchName: 'Sucursal Maipú (Edificio Salman)',
     boxNumber: 'Pabellón Quirúrgico 01',
-    date: '2026-08-28',
+    date: getTodayIso(),
     startTime: '11:00',
     endTime: '12:30',
     durationMinutes: 90,
@@ -662,7 +679,7 @@ export const INITIAL_APPOINTMENTS: Appointment[] = [
     branchId: 'branch-1',
     branchName: 'Sucursal Maipú (Edificio Salman)',
     boxNumber: 'Box 04',
-    date: '2026-08-28',
+    date: getTodayIso(),
     startTime: '14:00',
     endTime: '14:45',
     durationMinutes: 45,
@@ -688,7 +705,7 @@ export const INITIAL_APPOINTMENTS: Appointment[] = [
     branchId: 'branch-1',
     branchName: 'Sucursal Maipú (Edificio Salman)',
     boxNumber: 'Box 02',
-    date: '2026-08-28',
+    date: getTodayIso(),
     startTime: '15:30',
     endTime: '16:30',
     durationMinutes: 60,
@@ -714,7 +731,7 @@ export const INITIAL_APPOINTMENTS: Appointment[] = [
     branchId: 'branch-1',
     branchName: 'Sucursal Maipú (Edificio Salman)',
     boxNumber: 'Pabellón Quirúrgico 01',
-    date: '2026-09-04',
+    date: getFutureIso(7),
     startTime: '10:00',
     endTime: '11:00',
     durationMinutes: 60,

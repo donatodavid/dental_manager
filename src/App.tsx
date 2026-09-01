@@ -254,6 +254,26 @@ export default function App() {
     }
   };
 
+  // Reset monthly earnings and accounting payments for new period
+  const handleResetMonthlyEarnings = () => {
+    setPayments([]);
+    ClinicalDatabase.savePayments([]);
+    setCashSession(prev => {
+      const opening = typeof prev?.openingCash === 'number' ? prev.openingCash : 120000;
+      const next: CashRegisterSession = {
+        ...prev,
+        totalCashIncome: 0,
+        totalCardIncome: 0,
+        totalTransferIncome: 0,
+        totalInsuranceIncome: 0,
+        totalExpenses: 0,
+        expectedCashTotal: opening
+      };
+      ClinicalDatabase.saveCashSession(next);
+      return next;
+    });
+  };
+
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col font-sans selection:bg-blue-600 selection:text-white">
       
@@ -264,7 +284,7 @@ export default function App() {
           {/* Logo & Brand Identity */}
           <div className="flex items-center gap-3">
             <img 
-              src="/L.png" 
+              src="/pagnina.png" 
               alt="Daaron Consulta Dental" 
               className="h-10 w-auto object-contain drop-shadow-xs hover:scale-105 transition-transform"
             />
@@ -537,6 +557,7 @@ export default function App() {
             onDeleteBudget={handleDeleteBudget}
             onProcessPayment={handleProcessPayment}
             onUpdateCashSession={(updated) => setCashSession(updated)}
+            onResetMonthlyEarnings={handleResetMonthlyEarnings}
             activeRole={activeRole}
             currentBranchId={currentBranchId}
           />

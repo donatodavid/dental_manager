@@ -158,7 +158,7 @@ export const BudgetBuilderModal: React.FC<BudgetBuilderModalProps> = ({
   // Load logo
   useEffect(() => {
     const img = new Image();
-    img.src = '/L.png';
+    img.src = '/pagnina.png';
     img.onload = () => {
       logoImageRef.current = img;
       renderCanvas();
@@ -622,7 +622,7 @@ export const BudgetBuilderModal: React.FC<BudgetBuilderModalProps> = ({
         <div className="bg-[#FFFFFF] border-b border-[#D8D2C4] px-6 py-4 flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
             <img 
-              src="/L.png" 
+              src="/pagnina.png" 
               alt="Daaron Consulta Dental" 
               className="h-10 w-auto object-contain"
               onError={(e) => {

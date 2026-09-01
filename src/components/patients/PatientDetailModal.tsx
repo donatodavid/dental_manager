@@ -41,11 +41,14 @@ import {
   Receipt,
   CheckCircle2,
   FolderPlus,
-  Trash2
+  Trash2,
+  Download,
+  Loader2
 } from 'lucide-react';
 import { BudgetPrintModal } from '../billing/BudgetPrintModal';
 import { PatientPrescriptionGenerator } from './PatientPrescriptionGenerator';
 import { BudgetBuilderModal } from '../billing/BudgetBuilderModal';
+import { downloadBudgetPdf } from '../../utils/budgetExporter';
 
 interface PatientDetailModalProps {
   patient: Patient;
@@ -243,6 +246,11 @@ export const PatientDetailModal: React.FC<PatientDetailModalProps> = ({
         {/* Top Clinical Header Bar */}
         <div className="bg-slate-50/80 px-6 py-4 border-b border-slate-200 flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-4">
+            <img 
+              src="/pagnina.png" 
+              alt="Daaron Consulta Dental" 
+              className="h-11 w-auto object-contain hidden sm:block print:block"
+            />
             <div className="w-12 h-12 rounded-2xl bg-blue-50 border border-blue-200 flex items-center justify-center text-blue-700 font-extrabold text-lg shadow-xs">
               {patient.firstName[0]}{patient.lastName[0]}
             </div>
@@ -259,7 +267,7 @@ export const PatientDetailModal: React.FC<PatientDetailModalProps> = ({
                 </span>
               </div>
               <p className="text-xs text-slate-500 mt-0.5">
-                {age} años • {patient.gender === 'F' ? 'Femenino' : patient.gender === 'M' ? 'Masculino' : 'Otro'} • Previsión: <strong className="text-slate-800">{patient.insuranceProvider}</strong>
+                {age} años • {patient.gender === 'F' ? 'Femenino' : patient.gender === 'M' ? 'Masculino' : 'Otro'} • Previsión: <strong className="text-slate-800">{patient.insuranceProvider}</strong> • <span className="text-teal-700 font-semibold">Daaron Consulta Dental (Linares)</span>
               </p>
             </div>
           </div>
@@ -312,10 +320,10 @@ export const PatientDetailModal: React.FC<PatientDetailModalProps> = ({
         {/* Quick Patient Budget Overview Banner */}
         {(() => {
           const patientBudgets = budgets.filter(b => b.patientId === patient.id);
-          const totalBudgeted = patientBudgets.reduce((acc, b) => acc + b.totalPatient, 0);
-          const totalPaid = patientBudgets.reduce((acc, b) => acc + b.totalPaid, 0);
-          const balanceDue = patientBudgets.reduce((acc, b) => acc + b.balanceDue, 0);
-          const totalItems = patientBudgets.reduce((acc, b) => acc + b.items.length, 0);
+          const totalBudgeted = patientBudgets.reduce((acc, b) => acc + (b?.totalPatient || 0), 0);
+          const totalPaid = patientBudgets.reduce((acc, b) => acc + (b?.totalPaid || 0), 0);
+          const balanceDue = patientBudgets.reduce((acc, b) => acc + (b?.balanceDue || 0), 0);
+          const totalItems = patientBudgets.reduce((acc, b) => acc + (b?.items?.length || 0), 0);
 
           if (patientBudgets.length > 0) {
             return (
@@ -324,15 +332,15 @@ export const PatientDetailModal: React.FC<PatientDetailModalProps> = ({
                   <div className="flex items-center gap-1.5 text-blue-900 font-bold">
                     <DollarSign className="w-4 h-4 text-blue-600" />
                     <span>Presupuesto Activo:</span>
-                    <span className="font-mono text-sm text-slate-900 font-bold">${totalBudgeted.toLocaleString('es-CL')}</span>
+                    <span className="font-mono text-sm text-slate-900 font-bold">${(totalBudgeted ?? 0).toLocaleString('es-CL')}</span>
                   </div>
                   <div className="flex items-center gap-2 text-slate-700">
                     <span className="text-slate-500">Abonado:</span>
-                    <span className="font-mono text-emerald-600 font-semibold">${totalPaid.toLocaleString('es-CL')}</span>
+                    <span className="font-mono text-emerald-600 font-semibold">${(totalPaid ?? 0).toLocaleString('es-CL')}</span>
                   </div>
                   <div className="flex items-center gap-2 text-slate-700">
                     <span className="text-slate-500">Saldo Pendiente:</span>
-                    <span className="font-mono text-orange-600 font-bold">${balanceDue.toLocaleString('es-CL')}</span>
+                    <span className="font-mono text-orange-600 font-bold">${(balanceDue ?? 0).toLocaleString('es-CL')}</span>
                   </div>
                   <span className="text-[11px] bg-white text-slate-700 px-2.5 py-0.5 rounded-full font-mono border border-slate-200 font-medium">
                     {totalItems} tratamientos presupuestados
@@ -523,7 +531,7 @@ export const PatientDetailModal: React.FC<PatientDetailModalProps> = ({
                                 </span>
                               </div>
                               <span className="font-mono font-bold text-slate-900 shrink-0">
-                                ${item.patientCopay.toLocaleString('es-CL')}
+                                ${(item?.patientCopay ?? 0).toLocaleString('es-CL')}
                               </span>
                             </div>
                           ))}
@@ -536,7 +544,7 @@ export const PatientDetailModal: React.FC<PatientDetailModalProps> = ({
                       <div>
                         <span className="text-[10px] text-slate-500 block uppercase font-semibold">Total Presupuesto:</span>
                         <span className="text-base font-black font-mono text-slate-900">
-                          ${budget.totalPatient.toLocaleString('es-CL')}
+                          ${(budget?.totalPatient ?? 0).toLocaleString('es-CL')}
                         </span>
                       </div>
 
@@ -575,15 +583,29 @@ export const PatientDetailModal: React.FC<PatientDetailModalProps> = ({
                           <span>WhatsApp</span>
                         </button>
 
-                        {/* Print / Download PDF CTA */}
+                        {/* Direct Download PDF */}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const doctorObj = doctors.find(d => d.id === budget.doctorId);
+                            downloadBudgetPdf(budget, patient, doctorObj);
+                          }}
+                          className="px-3 py-1.5 bg-teal-50 hover:bg-teal-100 text-teal-700 border border-teal-200 rounded-full text-xs font-semibold flex items-center gap-1.5 transition-all shadow-2xs cursor-pointer"
+                          title="Descargar Presupuesto Oficial (PDF)"
+                        >
+                          <Download className="w-3.5 h-3.5 text-teal-600" />
+                          <span>Descargar PDF</span>
+                        </button>
+
+                        {/* Print / View Modal */}
                         <button
                           type="button"
                           onClick={() => setSelectedBudgetForPrint(budget)}
-                          className="px-3 py-1.5 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 rounded-full text-xs font-semibold flex items-center gap-1.5 transition-all shadow-2xs"
-                          title="Descargar o Imprimir Presupuesto (PDF)"
+                          className="px-3 py-1.5 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 rounded-full text-xs font-semibold flex items-center gap-1.5 transition-all shadow-2xs cursor-pointer"
+                          title="Ver / Imprimir Presupuesto"
                         >
                           <Printer className="w-3.5 h-3.5 text-blue-600" />
-                          <span>PDF</span>
+                          <span>Ver / Imprimir</span>
                         </button>
                       </div>
                     </div>

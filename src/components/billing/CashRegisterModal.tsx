@@ -104,28 +104,28 @@ export const CashRegisterModal: React.FC<CashRegisterModalProps> = ({
           <div className="bg-slate-950 p-3 rounded-xl border border-slate-800">
             <span className="text-[11px] text-slate-400 block">Sencillo Apertura</span>
             <span className="text-sm font-bold font-mono text-slate-200">
-              ${session.openingCash.toLocaleString('es-CL')}
+              ${(session?.openingCash ?? 0).toLocaleString('es-CL')}
             </span>
           </div>
 
           <div className="bg-slate-950 p-3 rounded-xl border border-slate-800">
             <span className="text-[11px] text-teal-400 block">Ingresos Efectivo</span>
             <span className="text-sm font-bold font-mono text-teal-300">
-              +${cashPaymentsTotal.toLocaleString('es-CL')}
+              +${(cashPaymentsTotal ?? 0).toLocaleString('es-CL')}
             </span>
           </div>
 
           <div className="bg-slate-950 p-3 rounded-xl border border-slate-800">
             <span className="text-[11px] text-blue-400 block">Tarjetas & POS</span>
             <span className="text-sm font-bold font-mono text-blue-300">
-              ${cardPaymentsTotal.toLocaleString('es-CL')}
+              ${(cardPaymentsTotal ?? 0).toLocaleString('es-CL')}
             </span>
           </div>
 
           <div className="bg-slate-950 p-3 rounded-xl border border-slate-800">
             <span className="text-[11px] text-red-400 block">Egresos / Gastos</span>
             <span className="text-sm font-bold font-mono text-red-300">
-              -${session.totalExpenses.toLocaleString('es-CL')}
+              -${(session?.totalExpenses ?? 0).toLocaleString('es-CL')}
             </span>
           </div>
         </div>
@@ -135,11 +135,11 @@ export const CashRegisterModal: React.FC<CashRegisterModalProps> = ({
           <div>
             <span className="text-xs font-semibold text-teal-300 block">Efectivo Teórico Esperado en Gaveta:</span>
             <span className="text-xl font-bold font-mono text-teal-200">
-              ${expectedCashInDrawer.toLocaleString('es-CL')}
+              ${(expectedCashInDrawer ?? 0).toLocaleString('es-CL')}
             </span>
           </div>
           <span className="text-xs px-2.5 py-1 rounded-full bg-teal-500/20 text-teal-300 border border-teal-500/30 font-semibold">
-            {session.status === 'OPEN' ? 'Caja Abierta' : 'Caja Cerrada'}
+            {session?.status === 'OPEN' ? 'Caja Abierta' : 'Caja Cerrada'}
           </span>
         </div>
 

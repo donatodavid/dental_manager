@@ -165,7 +165,7 @@ export const PatientPrescriptionGenerator: React.FC<PatientPrescriptionGenerator
 
     // 2. Draw Daaron Logo
     const logoImg = new Image();
-    logoImg.src = '/L.png';
+    logoImg.src = '/pagnina.png';
     logoImg.onload = () => {
       drawContent(ctx, w, h, logoImg);
     };
@@ -421,15 +421,25 @@ export const PatientPrescriptionGenerator: React.FC<PatientPrescriptionGenerator
     <div className="flex flex-col gap-6">
       
       {/* Top Banner with Quick Actions */}
-      <div className="flex flex-wrap items-center justify-between gap-3 bg-slate-800/80 p-4 rounded-2xl border border-slate-700">
-        <div>
-          <h3 className="text-base font-bold text-slate-100 flex items-center gap-2">
-            <FileText className="w-5 h-5 text-teal-400" />
-            <span>Generador de Fichas, Recetas Médicas & Indicaciones (PDF)</span>
-          </h3>
-          <p className="text-xs text-slate-400">
-            Daaron Consulta Dental — Linares. Emisión digital de recetas oficiales con firma, timbre y descarga en PDF.
-          </p>
+      <div className="flex flex-wrap items-center justify-between gap-4 bg-slate-800/80 p-4 rounded-2xl border border-slate-700">
+        <div className="flex items-center gap-3">
+          <img 
+            src="/pagnina.png" 
+            alt="Daaron Consulta Dental" 
+            className="h-11 w-auto object-contain"
+            onError={(e) => {
+              (e.target as HTMLElement).style.display = 'none';
+            }}
+          />
+          <div>
+            <h3 className="text-base font-bold text-slate-100 flex items-center gap-2">
+              <FileText className="w-5 h-5 text-teal-400" />
+              <span>Generador de Recetas Médicas & Indicaciones (PDF)</span>
+            </h3>
+            <p className="text-xs text-slate-400">
+              Daaron Consulta Dental — Linares. Emisión digital de recetas oficiales con firma, timbre y descarga en PDF.
+            </p>
+          </div>
         </div>
 
         <div className="flex items-center gap-2">

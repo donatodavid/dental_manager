@@ -200,7 +200,7 @@ export const OverviewDashboard: React.FC<OverviewDashboardProps> = ({
                   <span>Revenue from chats</span>
                 </div>
                 <div className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight mt-1">
-                  ${(totalRevenue > 0 ? totalRevenue : 97418).toLocaleString('es-CL')}
+                  ${totalRevenue.toLocaleString('es-CL')}
                 </div>
                 <div className="flex items-center gap-1 text-xs font-bold text-emerald-600 mt-1">
                   <span>↑ 18% mom</span>

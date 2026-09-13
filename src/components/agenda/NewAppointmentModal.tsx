@@ -34,8 +34,14 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
   defaultDoctorId,
   defaultBranchId
 }) => {
+  const sortedDoctors = [...doctors].sort((a, b) => {
+    if (a.name.includes('Alejandro')) return -1;
+    if (b.name.includes('Alejandro')) return 1;
+    return 0;
+  });
+
   const [patientId, setPatientId] = useState(patients[0]?.id || '');
-  const [doctorId, setDoctorId] = useState(defaultDoctorId || doctors[0]?.id || '');
+  const [doctorId, setDoctorId] = useState(defaultDoctorId || sortedDoctors[0]?.id || doctors[0]?.id || '');
   const [branchId, setBranchId] = useState(defaultBranchId || branches[0]?.id || '');
   const [date, setDate] = useState(defaultDate || new Date().toISOString().split('T')[0]);
   const [startTime, setStartTime] = useState('10:00');
@@ -149,7 +155,7 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
                 required
                 className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2.5 text-xs text-slate-200 focus:outline-none focus:border-teal-500"
               >
-                {doctors.map(d => (
+                {sortedDoctors.map(d => (
                   <option key={d.id} value={d.id}>
                     {d.name} ({d.specialty})
                   </option>

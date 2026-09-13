@@ -118,9 +118,9 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
 
   // Open WhatsApp template composer
   const handleOpenWhatsAppReminder = (apt: Appointment) => {
-    const patientObj = patients.find(p => p.id === apt.patientId);
     const doctorObj = doctors.find(d => d.id === apt.doctorId);
-    const message = `Hola ${apt.patientName.split(' ')[0]} 👋 Te recordamos tu cita odontológica en Cima Dental con el ${doctorObj?.name || apt.doctorName} para el día ${apt.date} a las ${apt.startTime} hrs (${apt.branchName}, ${apt.boxNumber}).\n\nProcedimiento: ${apt.reason}.\n\nPor favor responde "1" para confirmar o "2" para reagendar. ¡Te esperamos!`;
+    const patientFirstName = apt.patientName ? apt.patientName.split(' ')[0] : 'Estimado(a)';
+    const message = `Hola ${patientFirstName} 👋 Te recordamos tu cita odontológica en Consulta Dental Daaron con el ${doctorObj?.name || apt.doctorName} para el día ${apt.date} a las ${apt.startTime} hrs (${apt.branchName}).\n\nProcedimiento: ${apt.reason}.\n\n¡Te esperamos!`;
     setCustomWhatsAppMsg(message);
     setShowWhatsAppModal(apt);
     setWhatsappSentSuccess(false);
@@ -395,18 +395,18 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
               )}
             </div>
 
-            <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-800">
+            <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100">
               <button
                 type="button"
                 onClick={() => setShowWhatsAppModal(null)}
-                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-semibold"
+                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold cursor-pointer transition-colors"
               >
                 Cerrar
               </button>
               <button
                 type="button"
                 onClick={handleSendWhatsApp}
-                className="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold shadow-lg shadow-emerald-600/30 flex items-center gap-1.5"
+                className="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold shadow-lg shadow-emerald-600/20 flex items-center gap-1.5 cursor-pointer transition-colors"
               >
                 <ExternalLink className="w-4 h-4" />
                 Abrir Chat y Despachar

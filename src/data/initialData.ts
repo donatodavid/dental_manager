@@ -8,8 +8,23 @@ import {
   PaymentTransaction, 
   CashRegisterSession,
   ToothState,
-  ToothNumber
+  ToothNumber,
+  ClinicSettings
 } from '../types/clinical';
+
+export const DEFAULT_CLINIC_SETTINGS: ClinicSettings = {
+  name: 'Daaron Consulta Dental',
+  tagline: 'Centro Odontológico & Especialidades Clínicas',
+  address: 'Maipú 461, Local 304, Piso 3, Edificio Salman',
+  city: 'Linares',
+  region: 'Región del Maule',
+  phone: '+56 9 8408 5590',
+  email: 'contacto@daaron.dental',
+  rut: '76.543.210-K',
+  logoUrl: '/pagnina.png',
+  hours: 'Lunes a viernes 10:00 a 13:00 hrs. / 15:00 a 19:00 hrs. — Sábado 10:00 a 13:00 hrs.',
+  defaultDoctorId: 'doc-1'
+};
 
 export const INITIAL_BRANCHES: Branch[] = [
   {
@@ -26,19 +41,6 @@ export const INITIAL_BRANCHES: Branch[] = [
 export const INITIAL_DOCTORS: ProfessionalDoctor[] = [
   {
     id: 'doc-1',
-    name: 'Dr. Jorge de Luque',
-    documentId: '15.432.876-K',
-    specialty: 'Rehabilitación Oral & Estética',
-    licenseNumber: 'REG-MED-84920',
-    email: 'j.deluque@daaron.dental',
-    phone: '+56 9 8765 4321',
-    branchIds: ['branch-1'],
-    commissionRatePercent: 45,
-    color: '#0d9488',
-    avatarUrl: 'https://images.unsplash.com/photo-1622253692010-333f2da6031d?w=150&auto=format&fit=crop&q=80'
-  },
-  {
-    id: 'doc-2',
     name: 'Dr. Alejandro David',
     documentId: '13.876.543-2',
     specialty: 'Implantología & Cirugía Oral',
@@ -49,6 +51,19 @@ export const INITIAL_DOCTORS: ProfessionalDoctor[] = [
     commissionRatePercent: 50,
     color: '#0284c7',
     avatarUrl: 'https://images.unsplash.com/photo-1537368910025-700350fe46c7?w=150&auto=format&fit=crop&q=80'
+  },
+  {
+    id: 'doc-2',
+    name: 'Dr. Jorge de Luque',
+    documentId: '15.432.876-K',
+    specialty: 'Rehabilitación Oral & Estética',
+    licenseNumber: 'REG-MED-84920',
+    email: 'j.deluque@daaron.dental',
+    phone: '+56 9 8765 4321',
+    branchIds: ['branch-1'],
+    commissionRatePercent: 45,
+    color: '#0d9488',
+    avatarUrl: 'https://images.unsplash.com/photo-1622253692010-333f2da6031d?w=150&auto=format&fit=crop&q=80'
   }
 ];
 

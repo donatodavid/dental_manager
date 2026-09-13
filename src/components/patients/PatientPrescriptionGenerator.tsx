@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { jsPDF } from 'jspdf';
-import { Patient, ProfessionalDoctor } from '../../types/clinical';
+import { Patient, ProfessionalDoctor, ClinicSettings } from '../../types/clinical';
+import { ClinicalDatabase } from '../../services/db';
 import { 
   FileText, 
   Plus, 
@@ -46,48 +47,49 @@ const COMMON_DENTAL_MEDS = [
   { name: 'Azitromicina 500 mg', instructions: 'Tomar 1 comprimido al día 1 hora antes de la comida por 3 días (alérgicos a penicilina).' }
 ];
 
+// Helper to get local date in YYYY-MM-DD
+function getTodayLocalISODate(): string {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
 export const PatientPrescriptionGenerator: React.FC<PatientPrescriptionGeneratorProps> = ({
   patient,
   doctors,
   onSaveToHistory
 }) => {
-  // Preselected Doctor & Specialty
+  const [clinicSettings, setClinicSettings] = useState<ClinicSettings>(() => ClinicalDatabase.getClinicSettings());
+
+  // Preselected Doctor & Specialty - Dr. Alejandro David is ALWAYS option #1
   const [selectedDoctorName, setSelectedDoctorName] = useState<string>('Dr. Alejandro David');
-  const [selectedSpecialty, setSelectedSpecialty] = useState<string>('Odontólogo general');
+  const [selectedSpecialty, setSelectedSpecialty] = useState<string>('Implantología & Cirugía Oral');
   
   // Patient Details
   const [patientName, setPatientName] = useState<string>(`${patient.firstName} ${patient.lastName}`);
   const [patientRut, setPatientRut] = useState<string>(patient.documentId || '');
-  const [patientAge, setPatientAge] = useState<string>(patient.birthDate ? `${calculateAge(patient.birthDate)} años` : '');
-  const [prescriptionDate, setPrescriptionDate] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [patientPhone, setPatientPhone] = useState<string>(patient.phone || patient.whatsapp || '');
+  const [prescriptionDate, setPrescriptionDate] = useState<string>(getTodayLocalISODate);
 
-  // Medications List
-  const [medications, setMedications] = useState<PrescriptionItem[]>([
-    {
-      id: 'med-1',
-      name: 'Ibuprofeno 600 mg',
-      instructions: 'Tomar 1 comprimido cada 8 horas por 4 días después de las comidas.'
-    },
-    {
-      id: 'med-2',
-      name: 'Clorhexidina 0.12% Colutorio',
-      instructions: 'Enjuagar con 15 ml durante 30 segundos, 2 veces al día por 7 días.'
-    }
-  ]);
+  // Refresh clinic settings on mount and sync patient details with today's date
+  useEffect(() => {
+    setClinicSettings(ClinicalDatabase.getClinicSettings());
+  }, []);
+
+  useEffect(() => {
+    setPatientName(`${patient.firstName} ${patient.lastName}`);
+    setPatientRut(patient.documentId || '');
+    setPatientPhone(patient.phone || patient.whatsapp || '');
+    setPrescriptionDate(getTodayLocalISODate());
+  }, [patient]);
+
+  // Medications List - Empty by default
+  const [medications, setMedications] = useState<PrescriptionItem[]>([]);
 
   const [savedSuccess, setSavedSuccess] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-
-  function calculateAge(birthDateString: string): number {
-    const today = new Date();
-    const birthDate = new Date(birthDateString);
-    let age = today.getFullYear() - birthDate.getFullYear();
-    const m = today.getMonth() - birthDate.getMonth();
-    if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
-      age--;
-    }
-    return age;
-  }
 
   // Format RUT
   function formatRut(value: string): string {
@@ -105,15 +107,31 @@ export const PatientPrescriptionGenerator: React.FC<PatientPrescriptionGenerator
     return formatted + (dv ? '-' + dv : '');
   }
 
-  // Format Date in Chilean Spanish ("28 de agosto de 2026")
+  // Format Date in DD/MM/YYYY format (e.g., "11/09/2026") dynamically adapting to the selected date
   function formatFecha(dateStr: string): string {
     if (!dateStr) return '—';
-    const [y, m, d] = dateStr.split('-');
-    const meses = [
-      'enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
-      'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'
-    ];
-    return `${parseInt(d)} de ${meses[parseInt(m) - 1]} de ${y}`;
+    // If already formatted as DD/MM/YYYY
+    if (/^\d{2}\/\d{2}\/\d{4}$/.test(dateStr)) return dateStr;
+
+    // Standard YYYY-MM-DD format from <input type="date">
+    const parts = dateStr.split('-');
+    if (parts.length === 3) {
+      const [y, m, d] = parts;
+      const day = d.padStart(2, '0');
+      const month = m.padStart(2, '0');
+      return `${day}/${month}/${y}`;
+    }
+
+    // Fallback for Date objects or ISO strings
+    const parsed = new Date(dateStr);
+    if (!isNaN(parsed.getTime())) {
+      const day = String(parsed.getDate()).padStart(2, '0');
+      const month = String(parsed.getMonth() + 1).padStart(2, '0');
+      const year = parsed.getFullYear();
+      return `${day}/${month}/${year}`;
+    }
+
+    return dateStr;
   }
 
   // Add new empty medication
@@ -163,9 +181,11 @@ export const PatientPrescriptionGenerator: React.FC<PatientPrescriptionGenerator
     ctx.lineWidth = 3;
     ctx.strokeRect(0, 0, w, h);
 
-    // 2. Draw Daaron Logo
+    // 2. Draw Dynamic Clinic Logo
+    const logoSrc = clinicSettings.logoUrl || '/pagnina.png';
     const logoImg = new Image();
-    logoImg.src = '/pagnina.png';
+    logoImg.crossOrigin = 'anonymous';
+    logoImg.src = logoSrc;
     logoImg.onload = () => {
       drawContent(ctx, w, h, logoImg);
     };
@@ -179,25 +199,32 @@ export const PatientPrescriptionGenerator: React.FC<PatientPrescriptionGenerator
   const drawContent = (ctx: CanvasRenderingContext2D, w: number, h: number, logoImg: HTMLImageElement | null) => {
     // Top Logo
     if (logoImg && logoImg.naturalWidth !== 0) {
-      const logoW = 340;
-      const logoH = (logoImg.naturalHeight / logoImg.naturalWidth) * logoW;
-      ctx.drawImage(logoImg, w - logoW - 40, 30, logoW, logoH);
+      const maxLogoW = 340;
+      const maxLogoH = 85;
+      let logoW = maxLogoW;
+      let logoH = (logoImg.naturalHeight / logoImg.naturalWidth) * logoW;
+      if (logoH > maxLogoH) {
+        logoH = maxLogoH;
+        logoW = (logoImg.naturalWidth / logoImg.naturalHeight) * logoH;
+      }
+      ctx.drawImage(logoImg, w - logoW - 40, 25 + (maxLogoH - logoH) / 2, logoW, logoH);
     }
 
-    // Clinic Info
+    // Clinic Info from settings
     ctx.textAlign = "left";
     ctx.fillStyle = "#1B2A3D";
     ctx.font = "bold 24px Georgia, serif";
-    ctx.fillText("Consulta dental Daaron", 50, 60);
+    ctx.fillText(clinicSettings.name || "Consulta dental Daaron", 50, 60);
 
     ctx.fillStyle = "#7A7568";
-    ctx.font = "16px sans-serif";
-    ctx.fillText("Maipú 461 edificio Salman local", 50, 88);
-    ctx.fillText("304 piso 3 Linares", 50, 110);
+    ctx.font = "15px sans-serif";
+    ctx.fillText(clinicSettings.address || "Maipú 461 edificio Salman local 304 piso 3", 50, 88);
+    const cityLine = clinicSettings.city ? `${clinicSettings.city}${clinicSettings.phone ? ` • ${clinicSettings.phone}` : ''}` : "Linares";
+    ctx.fillText(cityLine, 50, 110);
 
     // Doctor info
-    const docName = selectedDoctorName || 'Dr(a). Nombre Apellido';
-    const docEsp = selectedSpecialty || 'Especialidad';
+    const docName = selectedDoctorName || 'Dr. Alejandro David';
+    const docEsp = selectedSpecialty || 'Implantología & Cirugía Oral';
 
     ctx.fillStyle = "#1B2A3D";
     ctx.font = "bold 23px Georgia, serif";
@@ -217,7 +244,6 @@ export const PatientPrescriptionGenerator: React.FC<PatientPrescriptionGenerator
 
     // Patient Banner
     const nombre = patientName || '—';
-    const edad = patientAge ? ` (${patientAge})` : '';
     const rut = patientRut || '—';
     const fecha = formatFecha(prescriptionDate);
 
@@ -229,7 +255,7 @@ export const PatientPrescriptionGenerator: React.FC<PatientPrescriptionGenerator
     ctx.fillText("PACIENTE", 50, 225);
     ctx.fillStyle = "#1B2A3D";
     ctx.font = "bold 18px sans-serif";
-    ctx.fillText(nombre + edad, 50, 250);
+    ctx.fillText(nombre, 50, 250);
 
     // RUT
     ctx.fillStyle = "#7A7568";
@@ -341,7 +367,7 @@ export const PatientPrescriptionGenerator: React.FC<PatientPrescriptionGenerator
     ctx.font = "12px sans-serif";
     ctx.fillText(docName, w - 175, h - 138);
 
-    // Timetable & Footer
+    // Timetable & Footer from settings
     ctx.textAlign = "left";
     ctx.strokeStyle = "#D8D2C4";
     ctx.beginPath();
@@ -354,13 +380,13 @@ export const PatientPrescriptionGenerator: React.FC<PatientPrescriptionGenerator
     ctx.fillText("HORARIO DE ATENCIÓN:", 50, h - 85);
     ctx.fillStyle = "#555";
     ctx.font = "14px sans-serif";
-    ctx.fillText("Lunes a viernes 10:00 a 13:00 hrs. / 15:00 a 19:00 hrs.", 50, h - 65);
-    ctx.fillText("Sábado 10:00 a 13:00 hrs. — Linares, Maule", 50, h - 46);
+    ctx.fillText(clinicSettings.hours || "Lunes a viernes 10:00 a 13:00 hrs. / 15:00 a 19:00 hrs. — Sábado 10:00 a 13:00 hrs.", 50, h - 65);
+    ctx.fillText(`${clinicSettings.city || 'Linares'}, ${clinicSettings.region || 'Maule'}`, 50, h - 46);
   };
 
   useEffect(() => {
     renderCanvas();
-  }, [selectedDoctorName, selectedSpecialty, patientName, patientRut, patientAge, prescriptionDate, medications]);
+  }, [clinicSettings, selectedDoctorName, selectedSpecialty, patientName, patientRut, patientPhone, prescriptionDate, medications]);
 
   // Download PDF
   const handleDownloadPdf = () => {
@@ -379,13 +405,14 @@ export const PatientPrescriptionGenerator: React.FC<PatientPrescriptionGenerator
     pdf.addImage(imgData, 'PNG', 5.5, 0, 5.5, 8.5);
 
     const cleanName = (patientName || 'Paciente').replace(/\s+/g, '_');
-    pdf.save(`Receta_Daaron_${cleanName}_${prescriptionDate}.pdf`);
+    const formattedDateForFile = formatFecha(prescriptionDate).replace(/\//g, '-');
+    pdf.save(`Receta_Daaron_${cleanName}_${formattedDateForFile}.pdf`);
 
     if (onSaveToHistory) {
       onSaveToHistory({
         doctorName: selectedDoctorName,
         specialty: selectedSpecialty,
-        date: prescriptionDate,
+        date: formatFecha(prescriptionDate),
         items: medications
       });
     }
@@ -401,14 +428,14 @@ export const PatientPrescriptionGenerator: React.FC<PatientPrescriptionGenerator
       .map((m, idx) => `*${idx + 1}. ${m.name}*\n👉 ${m.instructions}`)
       .join('\n\n');
 
-    const message = `🦷 *DAARON CONSULTA DENTAL — RECETA & INDICACIONES*\n\n` +
+    const message = `🦷 *${clinicSettings.name?.toUpperCase() || 'DAARON CONSULTA DENTAL'} — RECETA & INDICACIONES*\n\n` +
       `Estimado(a) *${patientName}*,\n` +
       `Le adjuntamos su receta odontológica e indicaciones emitidas por *${selectedDoctorName}* (${selectedSpecialty}):\n\n` +
       `📅 *Fecha:* ${formatFecha(prescriptionDate)}\n` +
       `🆔 *RUT:* ${patientRut}\n\n` +
       `💊 *MEDICAMENTOS & TRATAMIENTO:*\n${medsText}\n\n` +
-      `📍 *Atención:* Maipú 461 edificio Salman local 304 piso 3, Linares\n` +
-      `⏰ *Horario:* Lun a Vie 10:00-13:00 / 15:00-19:00 | Sáb 10:00-13:00\n\n` +
+      `📍 *Atención:* ${clinicSettings.address}, ${clinicSettings.city}\n` +
+      `⏰ *Horario:* ${clinicSettings.hours}\n\n` +
       `Ante cualquier duda con su medicación, no dude en comunicarse con nosotros. ¡Que tenga una pronta recuperación!`;
 
     const url = cleanPhone
@@ -424,8 +451,8 @@ export const PatientPrescriptionGenerator: React.FC<PatientPrescriptionGenerator
       <div className="flex flex-wrap items-center justify-between gap-4 bg-slate-800/80 p-4 rounded-2xl border border-slate-700">
         <div className="flex items-center gap-3">
           <img 
-            src="/pagnina.png" 
-            alt="Daaron Consulta Dental" 
+            src={clinicSettings.logoUrl || "/pagnina.png"} 
+            alt={clinicSettings.name || "Consulta Dental"} 
             className="h-11 w-auto object-contain"
             onError={(e) => {
               (e.target as HTMLElement).style.display = 'none';
@@ -437,7 +464,7 @@ export const PatientPrescriptionGenerator: React.FC<PatientPrescriptionGenerator
               <span>Generador de Recetas Médicas & Indicaciones (PDF)</span>
             </h3>
             <p className="text-xs text-slate-400">
-              Daaron Consulta Dental — Linares. Emisión digital de recetas oficiales con firma, timbre y descarga en PDF.
+              {clinicSettings.name} — {clinicSettings.city}. Emisión digital de recetas oficiales con firma, timbre y descarga en PDF.
             </p>
           </div>
         </div>
@@ -446,7 +473,7 @@ export const PatientPrescriptionGenerator: React.FC<PatientPrescriptionGenerator
           <button
             type="button"
             onClick={handleSendWhatsApp}
-            className="py-2 px-3 bg-emerald-700/90 hover:bg-emerald-600 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-sm transition-all"
+            className="py-2 px-3 bg-emerald-700/90 hover:bg-emerald-600 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-sm transition-all cursor-pointer"
             title="Enviar receta por WhatsApp"
           >
             <MessageSquare className="w-4 h-4" />
@@ -477,7 +504,7 @@ export const PatientPrescriptionGenerator: React.FC<PatientPrescriptionGenerator
         {/* LEFT COLUMN: Controls & Prescriptions */}
         <div className="lg:col-span-6 flex flex-col gap-4">
           
-          {/* Professional Selector */}
+          {/* Professional Selector - Dr. Alejandro David is ALWAYS option #1 */}
           <div className="bg-slate-800/80 p-4 rounded-2xl border border-slate-700 flex flex-col gap-3">
             <h4 className="text-xs font-bold text-teal-400 uppercase tracking-wider flex items-center gap-2 pb-2 border-b border-slate-700/80">
               <User className="w-4 h-4" />
@@ -491,14 +518,27 @@ export const PatientPrescriptionGenerator: React.FC<PatientPrescriptionGenerator
                 </label>
                 <select
                   value={selectedDoctorName}
-                  onChange={(e) => setSelectedDoctorName(e.target.value)}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setSelectedDoctorName(val);
+                    if (val === 'Dr. Alejandro David') {
+                      setSelectedSpecialty('Implantología & Cirugía Oral');
+                    } else if (val === 'Dr. Jorge de Luque' || val === 'Dr. Jorge Deluque') {
+                      setSelectedSpecialty('Rehabilitación Oral & Estética');
+                    } else {
+                      const found = doctors.find(d => d.name === val);
+                      if (found) setSelectedSpecialty(found.specialty);
+                    }
+                  }}
                   className="w-full bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-xs text-slate-100 focus:outline-none focus:border-teal-500 font-semibold"
                 >
-                  <option value="Dr. Alejandro David">Dr. Alejandro David</option>
-                  <option value="Dr. Jorge Deluque">Dr. Jorge Deluque</option>
-                  {doctors.map(d => (
-                    <option key={d.id} value={d.name}>{d.name}</option>
-                  ))}
+                  <option value="Dr. Alejandro David">Dr. Alejandro David (Predeterminado)</option>
+                  <option value="Dr. Jorge de Luque">Dr. Jorge de Luque</option>
+                  {doctors
+                    .filter(d => d.name !== 'Dr. Alejandro David' && d.name !== 'Dr. Jorge de Luque' && d.name !== 'Dr. Jorge Deluque')
+                    .map(d => (
+                      <option key={d.id} value={d.name}>{d.name}</option>
+                    ))}
                 </select>
               </div>
 
@@ -511,10 +551,11 @@ export const PatientPrescriptionGenerator: React.FC<PatientPrescriptionGenerator
                   onChange={(e) => setSelectedSpecialty(e.target.value)}
                   className="w-full bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-xs text-slate-100 focus:outline-none focus:border-teal-500"
                 >
+                  <option value="Implantología & Cirugía Oral">Implantología & Cirugía Oral</option>
                   <option value="Odontólogo general">Odontólogo general</option>
+                  <option value="Rehabilitación Oral & Estética">Rehabilitación Oral & Estética</option>
                   <option value="Ortodoncista">Ortodoncista</option>
                   <option value="Cirujano Dentista">Cirujano Dentista</option>
-                  <option value="Rehabilitador Oral">Rehabilitador Oral</option>
                   <option value="Endodoncista">Endodoncista</option>
                   <option value="Periodoncista">Periodoncista</option>
                 </select>
@@ -559,27 +600,45 @@ export const PatientPrescriptionGenerator: React.FC<PatientPrescriptionGenerator
 
                 <div>
                   <label className="text-[11px] font-semibold text-slate-300 block mb-1">
-                    Edad
+                    Teléfono
                   </label>
                   <input
                     type="text"
-                    value={patientAge}
-                    onChange={(e) => setPatientAge(e.target.value)}
+                    value={patientPhone}
+                    onChange={(e) => setPatientPhone(e.target.value)}
                     className="w-full bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-xs text-slate-100 focus:outline-none focus:border-teal-500"
-                    placeholder="Ej: 34 años"
+                    placeholder="+56 9 ..."
                   />
                 </div>
 
                 <div>
-                  <label className="text-[11px] font-semibold text-slate-300 block mb-1">
-                    Fecha de Emisión
-                  </label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-[11px] font-semibold text-slate-300 block">
+                      Fecha de Emisión
+                    </label>
+                    <span className="text-[11px] font-mono font-bold text-teal-400 bg-teal-950/70 px-2 py-0.5 rounded border border-teal-800/60">
+                      {formatFecha(prescriptionDate)}
+                    </span>
+                  </div>
                   <input
                     type="date"
                     value={prescriptionDate}
                     onChange={(e) => setPrescriptionDate(e.target.value)}
-                    className="w-full bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-xs text-slate-100 focus:outline-none focus:border-teal-500"
+                    className="w-full bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-xs text-slate-100 focus:outline-none focus:border-teal-500 font-medium"
                   />
+                  <div className="flex items-center justify-between mt-1 text-[10px]">
+                    <span className="text-slate-400">
+                      Formato oficial: DD/MM/AAAA
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setPrescriptionDate(getTodayLocalISODate())}
+                      className="text-teal-400 hover:text-teal-300 underline font-semibold cursor-pointer"
+                      title="Restablecer a la fecha de hoy"
+                    >
+                      Hoy ({formatFecha(getTodayLocalISODate())})
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>

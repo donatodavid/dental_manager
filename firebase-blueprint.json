@@ -1,0 +1,182 @@
+{
+  "entities": {
+    "patients": {
+      "title": "Pacientes",
+      "description": "Fichas clínicas completas de pacientes, antecedentes médicos, odontograma, evoluciones y documentos.",
+      "fields": {
+        "id": { "type": "string", "description": "ID único del paciente" },
+        "documentId": { "type": "string", "description": "RUT o documento de identidad" },
+        "firstName": { "type": "string", "description": "Nombre del paciente" },
+        "lastName": { "type": "string", "description": "Apellidos del paciente" },
+        "birthDate": { "type": "string", "description": "Fecha de nacimiento" },
+        "gender": { "type": "string", "description": "Género (M, F, OTHER)" },
+        "phone": { "type": "string", "description": "Teléfono de contacto" },
+        "whatsapp": { "type": "string", "description": "Número de WhatsApp" },
+        "email": { "type": "string", "description": "Correo electrónico" },
+        "address": { "type": "string", "description": "Dirección domiciliaria" },
+        "city": { "type": "string", "description": "Ciudad" },
+        "insuranceProvider": { "type": "string", "description": "Previsión de salud (Fonasa, Isapre, Particular)" },
+        "medicalBackground": { "type": "map", "description": "Antecedentes médicos e historial de salud" },
+        "odontogram": { "type": "map", "description": "Estado y diagnóstico de piezas dentales en odontograma interactivo" },
+        "evolutions": { "type": "list", "description": "Historial de atenciones y evoluciones clínicas SOAP" },
+        "documents": { "type": "list", "description": "Documentos clínicos, radiografías y consentimientos" },
+        "status": { "type": "string", "description": "Estado del paciente (ACTIVE, INACTIVE, ARCHIVED)" },
+        "registeredAt": { "type": "string", "description": "Fecha y hora de registro" }
+      }
+    },
+    "budgets": {
+      "title": "Presupuestos Odontológicos",
+      "description": "Presupuestos de tratamientos dentales, prestaciones, valores y estado de pago.",
+      "fields": {
+        "id": { "type": "string", "description": "ID único del presupuesto" },
+        "budgetNumber": { "type": "string", "description": "Folio o número de presupuesto" },
+        "patientId": { "type": "string", "description": "ID del paciente asociado" },
+        "patientName": { "type": "string", "description": "Nombre completo del paciente" },
+        "doctorId": { "type": "string", "description": "ID del odontólogo tratante" },
+        "doctorName": { "type": "string", "description": "Nombre del odontólogo" },
+        "branchId": { "type": "string", "description": "ID de la sucursal" },
+        "createdAt": { "type": "string", "description": "Fecha de creación" },
+        "status": { "type": "string", "description": "Estado (DRAFT, SENT, ACCEPTED, IN_TREATMENT, PAID, EXPIRED)" },
+        "items": { "type": "list", "description": "Lista de prestaciones y tratamientos presupuestados" },
+        "subtotal": { "type": "number", "description": "Monto subtotal" },
+        "discountTotal": { "type": "number", "description": "Descuento total aplicado" },
+        "insuranceTotal": { "type": "number", "description": "Cobertura de seguro" },
+        "totalPatient": { "type": "number", "description": "Total final a pagar por el paciente" },
+        "totalPaid": { "type": "number", "description": "Total abonado o pagado" },
+        "balanceDue": { "type": "number", "description": "Saldo pendiente" }
+      }
+    },
+    "appointments": {
+      "title": "Citas Odontológicas",
+      "description": "Agenda clínica de citas de pacientes con odontólogos.",
+      "fields": {
+        "id": { "type": "string", "description": "ID único de la cita" },
+        "patientId": { "type": "string", "description": "ID del paciente" },
+        "patientName": { "type": "string", "description": "Nombre del paciente" },
+        "patientPhone": { "type": "string", "description": "Teléfono del paciente" },
+        "doctorId": { "type": "string", "description": "ID del odontólogo" },
+        "doctorName": { "type": "string", "description": "Nombre del odontólogo" },
+        "branchId": { "type": "string", "description": "ID de la sucursal" },
+        "date": { "type": "string", "description": "Fecha de la cita (YYYY-MM-DD)" },
+        "startTime": { "type": "string", "description": "Hora de inicio (HH:mm)" },
+        "endTime": { "type": "string", "description": "Hora de término (HH:mm)" },
+        "durationMinutes": { "type": "number", "description": "Duración en minutos" },
+        "reason": { "type": "string", "description": "Motivo de consulta o procedimiento" },
+        "status": { "type": "string", "description": "Estado de la cita (SCHEDULED, CONFIRMED, WAITING_ROOM, IN_TREATMENT, COMPLETED, CANCELLED)" },
+        "reminderSent": { "type": "map", "description": "Registro de recordatorios despachados por WhatsApp y email" }
+      }
+    },
+    "payments": {
+      "title": "Pagos y Boletas",
+      "description": "Transacciones financieras, abonos a tratamientos y pagos de caja.",
+      "fields": {
+        "id": { "type": "string", "description": "ID único de la transacción" },
+        "receiptNumber": { "type": "string", "description": "Número de recibo o boleta" },
+        "patientId": { "type": "string", "description": "ID del paciente" },
+        "patientName": { "type": "string", "description": "Nombre del paciente" },
+        "budgetId": { "type": "string", "description": "ID del presupuesto abonado (opcional)" },
+        "amount": { "type": "number", "description": "Monto pagado" },
+        "paymentMethod": { "type": "string", "description": "Medio de pago (CASH, DEBIT_CARD, CREDIT_CARD, BANK_TRANSFER)" },
+        "date": { "type": "string", "description": "Fecha de pago" },
+        "time": { "type": "string", "description": "Hora de pago" },
+        "concept": { "type": "string", "description": "Concepto o detalle del pago" },
+        "receiptType": { "type": "string", "description": "Tipo de comprobante" },
+        "cashRegisterId": { "type": "string", "description": "ID de la sesión de caja" },
+        "receivedBy": { "type": "string", "description": "Usuario que recibió el pago" }
+      }
+    },
+    "cash_sessions": {
+      "title": "Sesiones de Caja",
+      "description": "Aperturas, cierres y balance de caja diaria.",
+      "fields": {
+        "id": { "type": "string", "description": "ID único de sesión de caja" },
+        "branchId": { "type": "string", "description": "Sucursal de la caja" },
+        "branchName": { "type": "string", "description": "Nombre de la sucursal" },
+        "openedAt": { "type": "string", "description": "Fecha y hora de apertura" },
+        "closedAt": { "type": "string", "description": "Fecha y hora de cierre" },
+        "openingCash": { "type": "number", "description": "Monto de apertura en efectivo" },
+        "closingCash": { "type": "number", "description": "Monto de cierre real" },
+        "totalCashIncome": { "type": "number", "description": "Total ingresos en efectivo" },
+        "totalCardIncome": { "type": "number", "description": "Total ingresos con tarjeta" },
+        "totalTransferIncome": { "type": "number", "description": "Total ingresos por transferencia" },
+        "expectedCashTotal": { "type": "number", "description": "Efectivo esperado en caja" },
+        "status": { "type": "string", "description": "Estado de la caja (OPEN, CLOSED)" }
+      }
+    },
+    "clinic_settings": {
+      "title": "Configuración de la Clínica",
+      "description": "Datos comerciales, información de contacto, sucursales y doctores de Consulta Dental Daaron.",
+      "fields": {
+        "name": { "type": "string", "description": "Nombre de la clínica" },
+        "address": { "type": "string", "description": "Dirección de la clínica" },
+        "phone": { "type": "string", "description": "Teléfono de contacto" },
+        "email": { "type": "string", "description": "Correo de contacto" },
+        "rut": { "type": "string", "description": "RUT comercial" }
+      }
+    },
+    "users": {
+      "title": "Usuarios y Profesionales",
+      "description": "Perfiles y roles de los usuarios del sistema clínico.",
+      "fields": {
+        "uid": { "type": "string", "description": "ID del usuario en Firebase Auth" },
+        "email": { "type": "string", "description": "Correo electrónico" },
+        "displayName": { "type": "string", "description": "Nombre completo" },
+        "role": { "type": "string", "description": "Rol clínico (ADMIN, DOCTOR, RECEPTIONIST)" }
+      }
+    }
+  },
+  "roles": {
+    "admin": {
+      "title": "Administrador",
+      "description": "Acceso total a configuración, caja, pacientes, presupuestos y agendas."
+    },
+    "staff": {
+      "title": "Personal Clínico",
+      "description": "Odontólogos y recepcionistas con permisos de registro clínico y citas."
+    }
+  },
+  "accessRules": [
+    {
+      "entity": "patients",
+      "role": "any",
+      "operations": ["create", "read", "update", "delete"],
+      "conditions": ["Lectura y gestión de pacientes para atención odontológica"]
+    },
+    {
+      "entity": "budgets",
+      "role": "any",
+      "operations": ["create", "read", "update", "delete"],
+      "conditions": ["Emisión y control de presupuestos odontológicos"]
+    },
+    {
+      "entity": "appointments",
+      "role": "any",
+      "operations": ["create", "read", "update", "delete"],
+      "conditions": ["Agendamiento de citas y recordatorios de pacientes"]
+    },
+    {
+      "entity": "payments",
+      "role": "any",
+      "operations": ["create", "read", "update", "delete"],
+      "conditions": ["Registro y comprobantes de pagos clínicos"]
+    },
+    {
+      "entity": "cash_sessions",
+      "role": "any",
+      "operations": ["create", "read", "update", "delete"],
+      "conditions": ["Control de caja diaria y arqueo"]
+    },
+    {
+      "entity": "clinic_settings",
+      "role": "any",
+      "operations": ["create", "read", "update"],
+      "conditions": ["Parámetros generales de Consulta Dental Daaron"]
+    },
+    {
+      "entity": "users",
+      "role": "any",
+      "operations": ["create", "read", "update"],
+      "conditions": ["Identificación y sincronización de usuarios del equipo"]
+    }
+  ]
+}

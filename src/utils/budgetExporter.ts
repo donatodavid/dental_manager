@@ -1,10 +1,12 @@
 import { jsPDF } from 'jspdf';
-import { TreatmentBudget, Patient, ProfessionalDoctor } from '../types/clinical';
+import { TreatmentBudget, Patient, ProfessionalDoctor, ClinicSettings } from '../types/clinical';
+import { ClinicalDatabase } from '../services/db';
 
 export interface BudgetExportOptions {
   budget: TreatmentBudget;
   patient?: Patient;
   doctor?: ProfessionalDoctor;
+  settings?: ClinicSettings;
 }
 
 const formatCLP = (val: number | string): string => {
@@ -51,10 +53,13 @@ export const renderBudgetToCanvas = async (
   canvas: HTMLCanvasElement,
   budget: TreatmentBudget,
   patient?: Patient,
-  doctor?: ProfessionalDoctor
+  doctor?: ProfessionalDoctor,
+  customSettings?: ClinicSettings
 ): Promise<void> => {
   const ctx = canvas.getContext('2d');
   if (!ctx) return;
+
+  const settings = customSettings || ClinicalDatabase.getClinicSettings();
 
   const w = 816;
   const h = 1056;
@@ -70,35 +75,44 @@ export const renderBudgetToCanvas = async (
   ctx.lineWidth = 3;
   ctx.strokeRect(0, 0, w, h);
 
-  // 3. Draw Daaron Logo on Right
-  const logoImg = await loadImage('/pagnina.png');
+  // 3. Draw Clinic Logo on Right
+  const logoSrc = settings.logoUrl || '/pagnina.png';
+  const logoImg = await loadImage(logoSrc);
   if (logoImg && logoImg.complete && logoImg.naturalWidth !== 0) {
-    const logoW = 340;
-    const logoH = (logoImg.naturalHeight / logoImg.naturalWidth) * logoW;
-    ctx.drawImage(logoImg, w - logoW - 40, 30, logoW, logoH);
+    const maxLogoW = 340;
+    const maxLogoH = 90;
+    let logoW = maxLogoW;
+    let logoH = (logoImg.naturalHeight / logoImg.naturalWidth) * logoW;
+    if (logoH > maxLogoH) {
+      logoH = maxLogoH;
+      logoW = (logoImg.naturalWidth / logoImg.naturalHeight) * logoH;
+    }
+    ctx.drawImage(logoImg, w - logoW - 40, 25 + (maxLogoH - logoH) / 2, logoW, logoH);
   }
 
   // 4. Top-Left Header: Clinic & Doctor Info
   ctx.textAlign = 'left';
   ctx.fillStyle = '#1B2A3D';
   ctx.font = 'bold 20px Georgia, serif';
-  ctx.fillText('Consulta dental Daaron', 50, 60);
+  ctx.fillText(settings.name || 'Consulta dental Daaron', 50, 55);
 
   ctx.fillStyle = '#7A7568';
-  ctx.font = '14px sans-serif';
-  ctx.fillText('Maipú 461 edificio Salman local', 50, 82);
-  ctx.fillText('304 piso 3 Linares', 50, 100);
+  ctx.font = '13px sans-serif';
+  const addressLine1 = settings.address || 'Maipú 461 edificio Salman local';
+  const addressLine2 = settings.city ? `${settings.city}${settings.phone ? ` • Tel: ${settings.phone}` : ''}` : '304 piso 3 Linares';
+  ctx.fillText(addressLine1, 50, 77);
+  ctx.fillText(addressLine2, 50, 95);
 
-  const docName = budget.doctorName || doctor?.name || 'Dr(a). Profesional Tratante';
-  const docEspecialidad = doctor?.specialty || 'Cirujano Dentista';
+  const docName = budget.doctorName || doctor?.name || 'Dr. Alejandro David';
+  const docEspecialidad = doctor?.specialty || (docName.includes('Alejandro') ? 'Implantología & Cirugía Oral' : 'Cirujano Dentista');
 
   ctx.fillStyle = '#1B2A3D';
   ctx.font = 'bold 21px Georgia, serif';
-  ctx.fillText(docName, 50, 130);
+  ctx.fillText(docName, 50, 128);
 
   ctx.fillStyle = '#7A7568';
   ctx.font = '15px sans-serif';
-  ctx.fillText(docEspecialidad, 50, 150);
+  ctx.fillText(docEspecialidad, 50, 149);
 
   // 5. Green Divider Line
   ctx.strokeStyle = '#1F4B44';
@@ -110,16 +124,8 @@ export const renderBudgetToCanvas = async (
 
   // 6. Patient Information Section
   const nombre = budget.patientName || (patient ? `${patient.firstName} ${patient.lastName}` : '—');
-  let edadStr = '';
-  if (patient?.birthDate) {
-    const birthYear = new Date(patient.birthDate).getFullYear();
-    const currentYear = new Date().getFullYear();
-    const age = currentYear - birthYear;
-    if (!isNaN(age)) {
-      edadStr = ` (${age} años)`;
-    }
-  }
-  const rut = formatRut(patient?.documentId);
+  const rut = formatRut(patient?.documentId || budget.patientRut);
+  const telefono = patient?.phone || patient?.whatsapp || budget.patientPhone || '—';
   const fechaFmt = formatFecha(budget.createdAt);
 
   ctx.textAlign = 'left';
@@ -127,29 +133,37 @@ export const renderBudgetToCanvas = async (
   ctx.font = 'bold 12px sans-serif';
   ctx.fillText('PACIENTE', 50, 215);
   ctx.fillStyle = '#1B2A3D';
-  ctx.font = 'bold 16px sans-serif';
-  ctx.fillText(nombre + edadStr, 50, 237);
+  ctx.font = 'bold 15px sans-serif';
+  ctx.fillText(nombre, 50, 237);
 
   ctx.fillStyle = '#7A7568';
   ctx.font = 'bold 12px sans-serif';
-  ctx.fillText('RUT', 450, 215);
+  ctx.fillText('RUT', 320, 215);
   ctx.fillStyle = '#1B2A3D';
-  ctx.font = 'bold 16px sans-serif';
-  ctx.fillText(rut, 450, 237);
+  ctx.font = 'bold 15px sans-serif';
+  ctx.fillText(rut, 320, 237);
 
   ctx.fillStyle = '#7A7568';
   ctx.font = 'bold 12px sans-serif';
-  ctx.fillText('FECHA', 620, 215);
+  ctx.fillText('TELÉFONO', 470, 215);
   ctx.fillStyle = '#1B2A3D';
-  ctx.font = 'bold 16px sans-serif';
-  ctx.fillText(fechaFmt, 620, 237);
+  ctx.font = 'bold 15px sans-serif';
+  ctx.fillText(telefono, 470, 237);
+
+  ctx.fillStyle = '#7A7568';
+  ctx.font = 'bold 12px sans-serif';
+  ctx.fillText('FECHA', 640, 215);
+  ctx.fillStyle = '#1B2A3D';
+  ctx.font = 'bold 15px sans-serif';
+  ctx.fillText(fechaFmt, 640, 237);
 
   ctx.strokeStyle = '#D8D2C4';
   ctx.lineWidth = 1;
   ctx.beginPath();
-  ctx.moveTo(50, 245); ctx.lineTo(420, 245);
-  ctx.moveTo(450, 245); ctx.lineTo(600, 245);
-  ctx.moveTo(620, 245); ctx.lineTo(w - 50, 245);
+  ctx.moveTo(50, 245); ctx.lineTo(300, 245);
+  ctx.moveTo(320, 245); ctx.lineTo(450, 245);
+  ctx.moveTo(470, 245); ctx.lineTo(620, 245);
+  ctx.moveTo(640, 245); ctx.lineTo(w - 50, 245);
   ctx.stroke();
 
   // 7. Document Subtitle & Budget Folio
@@ -288,19 +302,20 @@ export const renderBudgetToCanvas = async (
   ctx.font = 'bold 12px sans-serif';
   ctx.fillText('HORARIO DE ATENCIÓN:', 50, h - 65);
   ctx.font = '13px sans-serif';
-  ctx.fillText('Lunes a viernes 10:00 a 13:00 hrs. / 15:00 a 19:00 hrs. — Sábado 10:00 a 13:00 hrs.', 50, h - 45);
+  ctx.fillText(settings.hours || 'Lunes a viernes 10:00 a 13:00 hrs. / 15:00 a 19:00 hrs. — Sábado 10:00 a 13:00 hrs.', 50, h - 45);
 };
 
 /**
- * Direct download function for any budget as PDF
+ * Generates official Budget PDF Blob
  */
-export const downloadBudgetPdf = async (
+export const generateBudgetPdfBlob = async (
   budget: TreatmentBudget,
   patient?: Patient,
-  doctor?: ProfessionalDoctor
-): Promise<void> => {
+  doctor?: ProfessionalDoctor,
+  settings?: ClinicSettings
+): Promise<{ blob: Blob; fileName: string }> => {
   const canvas = document.createElement('canvas');
-  await renderBudgetToCanvas(canvas, budget, patient, doctor);
+  await renderBudgetToCanvas(canvas, budget, patient, doctor, settings);
 
   const pdf = new jsPDF({
     orientation: 'portrait',
@@ -312,7 +327,27 @@ export const downloadBudgetPdf = async (
   pdf.addImage(imgData, 'PNG', 0, 0, 8.5, 11);
 
   const safePacName = (budget.patientName || 'Paciente').replace(/[^a-zA-Z0-9_-]/g, '_');
-  pdf.save(`Presupuesto_${budget.budgetNumber}_${safePacName}.pdf`);
+  const fileName = `Presupuesto_${budget.budgetNumber}_${safePacName}.pdf`;
+  const blob = pdf.output('blob');
+  return { blob, fileName };
+};
+
+/**
+ * Direct download function for any budget as PDF
+ */
+export const downloadBudgetPdf = async (
+  budget: TreatmentBudget,
+  patient?: Patient,
+  doctor?: ProfessionalDoctor,
+  settings?: ClinicSettings
+): Promise<void> => {
+  const { blob, fileName } = await generateBudgetPdfBlob(budget, patient, doctor, settings);
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = fileName;
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(url), 10000);
 };
 
 /**
@@ -321,10 +356,11 @@ export const downloadBudgetPdf = async (
 export const downloadBudgetPng = async (
   budget: TreatmentBudget,
   patient?: Patient,
-  doctor?: ProfessionalDoctor
+  doctor?: ProfessionalDoctor,
+  settings?: ClinicSettings
 ): Promise<void> => {
   const canvas = document.createElement('canvas');
-  await renderBudgetToCanvas(canvas, budget, patient, doctor);
+  await renderBudgetToCanvas(canvas, budget, patient, doctor, settings);
 
   const link = document.createElement('a');
   const safePacName = (budget.patientName || 'Paciente').replace(/[^a-zA-Z0-9_-]/g, '_');
@@ -332,3 +368,91 @@ export const downloadBudgetPng = async (
   link.href = canvas.toDataURL('image/png');
   link.click();
 };
+
+export interface WhatsAppShareResult {
+  success: boolean;
+  method: 'native_share' | 'clipboard_opened' | 'download_opened' | 'cancelled';
+  message: string;
+}
+
+/**
+ * Sends or prepares the budget as a PDF document for WhatsApp (no text description)
+ */
+export const shareBudgetViaWhatsAppPdf = async (
+  budget: TreatmentBudget,
+  patient?: Patient,
+  doctor?: ProfessionalDoctor,
+  settings?: ClinicSettings
+): Promise<WhatsAppShareResult> => {
+  try {
+    const { blob, fileName } = await generateBudgetPdfBlob(budget, patient, doctor, settings);
+    const pdfFile = new File([blob], fileName, { type: 'application/pdf' });
+
+    const phone = patient?.whatsapp || patient?.phone || budget.patientPhone || '';
+    const cleanPhone = phone.replace(/[^0-9]/g, '');
+
+    // 1. Try Native Web Share API with PDF file
+    if (typeof navigator !== 'undefined' && navigator.canShare && navigator.canShare({ files: [pdfFile] })) {
+      try {
+        await navigator.share({
+          files: [pdfFile],
+          title: `Presupuesto ${budget.budgetNumber} - ${budget.patientName}`,
+        });
+        return {
+          success: true,
+          method: 'native_share',
+          message: '📄 Documento PDF del presupuesto compartido por WhatsApp exitosamente'
+        };
+      } catch (shareErr: any) {
+        if (shareErr.name === 'AbortError') {
+          return {
+            success: false,
+            method: 'cancelled',
+            message: 'Envío cancelado por el usuario'
+          };
+        }
+        console.warn('Native share failed, using download fallback:', shareErr);
+      }
+    }
+
+    // 2. Trigger direct download of the PDF file
+    const downloadLink = document.createElement('a');
+    downloadLink.download = fileName;
+    downloadLink.href = URL.createObjectURL(blob);
+    downloadLink.click();
+    setTimeout(() => URL.revokeObjectURL(downloadLink.href), 10000);
+
+    // 3. Open WhatsApp chat window without text description
+    const waUrl = cleanPhone 
+      ? `https://api.whatsapp.com/send?phone=${cleanPhone}` 
+      : `https://api.whatsapp.com/send`;
+    
+    window.open(waUrl, '_blank');
+
+    return {
+      success: true,
+      method: 'download_opened',
+      message: '📄 ¡Documento PDF del presupuesto descargado! Se abrió WhatsApp para adjuntar el archivo PDF directamente al paciente.'
+    };
+  } catch (err: any) {
+    console.error('Error sharing budget PDF via WhatsApp:', err);
+    return {
+      success: false,
+      method: 'cancelled',
+      message: err.message || 'No se pudo enviar el PDF del presupuesto por WhatsApp'
+    };
+  }
+};
+
+/**
+ * Sends or prepares the budget as an IMAGE for WhatsApp
+ */
+export const shareBudgetViaWhatsAppImage = async (
+  budget: TreatmentBudget,
+  patient?: Patient,
+  doctor?: ProfessionalDoctor,
+  settings?: ClinicSettings
+): Promise<WhatsAppShareResult> => {
+  return shareBudgetViaWhatsAppPdf(budget, patient, doctor, settings);
+};
+

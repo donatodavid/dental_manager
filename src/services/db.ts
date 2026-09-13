@@ -3,10 +3,9 @@ import {
   TreatmentBudget, 
   Appointment, 
   PaymentTransaction, 
-  CashRegisterSession,
-  Branch,
-  ProfessionalDoctor,
-  TreatmentTariffItem
+  CashRegisterSession, 
+  ClinicSettings,
+  ProfessionalDoctor
 } from '../types/clinical';
 import { 
   INITIAL_PATIENTS, 
@@ -16,8 +15,10 @@ import {
   INITIAL_CASH_SESSION,
   INITIAL_BRANCHES,
   INITIAL_DOCTORS,
-  INITIAL_TARIFFS
+  INITIAL_TARIFFS,
+  DEFAULT_CLINIC_SETTINGS
 } from '../data/initialData';
+import { FirestoreService } from './firestoreService';
 
 const DB_KEYS = {
   PATIENTS: 'cima_db_patients_v3',
@@ -25,6 +26,8 @@ const DB_KEYS = {
   APPOINTMENTS: 'cima_db_appointments_v3',
   PAYMENTS: 'cima_db_payments_v3',
   CASH_SESSION: 'cima_db_cash_session_v3',
+  CLINIC_SETTINGS: 'cima_db_clinic_settings_v3',
+  PAYMENTS_INITIALIZED: 'cima_db_payments_init_v3',
   LAST_SYNC: 'cima_db_last_sync_v3',
   CLOUD_SYNCED: 'cima_db_cloud_synced_v3'
 };
@@ -42,58 +45,24 @@ export interface DatabaseStats {
 export class ClinicalDatabase {
   private static isSyncing = false;
 
-  // Initialize and sync with Cloud SQL PostgreSQL backend
+  // Initialize and sync with Firebase Firestore
   static async initCloudSync(): Promise<void> {
     if (this.isSyncing) return;
     this.isSyncing = true;
     try {
-      // 1. Fetch remote data from PostgreSQL API
-      const [pRes, bRes, aRes, payRes, csRes] = await Promise.allSettled([
-        fetch('/api/patients').then(r => r.json()),
-        fetch('/api/budgets').then(r => r.json()),
-        fetch('/api/appointments').then(r => r.json()),
-        fetch('/api/payments').then(r => r.json()),
-        fetch('/api/cash-session').then(r => r.json())
-      ]);
-
-      let hasCloudData = false;
-
-      if (pRes.status === 'fulfilled' && pRes.value?.success && Array.isArray(pRes.value.data) && pRes.value.data.length > 0) {
-        localStorage.setItem(DB_KEYS.PATIENTS, JSON.stringify(pRes.value.data));
-        hasCloudData = true;
-      }
-      if (bRes.status === 'fulfilled' && bRes.value?.success && Array.isArray(bRes.value.data) && bRes.value.data.length > 0) {
-        localStorage.setItem(DB_KEYS.BUDGETS, JSON.stringify(bRes.value.data));
-        hasCloudData = true;
-      }
-      if (aRes.status === 'fulfilled' && aRes.value?.success && Array.isArray(aRes.value.data) && aRes.value.data.length > 0) {
-        localStorage.setItem(DB_KEYS.APPOINTMENTS, JSON.stringify(aRes.value.data));
-        hasCloudData = true;
-      }
-      if (payRes.status === 'fulfilled' && payRes.value?.success && Array.isArray(payRes.value.data) && payRes.value.data.length > 0) {
-        localStorage.setItem(DB_KEYS.PAYMENTS, JSON.stringify(payRes.value.data));
-        hasCloudData = true;
-      }
-      if (csRes.status === 'fulfilled' && csRes.value?.success && csRes.value.data) {
-        localStorage.setItem(DB_KEYS.CASH_SESSION, JSON.stringify(csRes.value.data));
-        hasCloudData = true;
-      }
-
-      // If cloud DB is brand new/empty, seed initial clinical data to PostgreSQL
-      if (!hasCloudData) {
-        await this.syncAllToCloud();
-      }
+      // Seed Firestore with initial clinic records if empty
+      await FirestoreService.initAndSeed();
 
       localStorage.setItem(DB_KEYS.CLOUD_SYNCED, 'true');
       this.updateLastSync();
     } catch (e) {
-      console.warn('Cloud SQL background sync warning:', e);
+      console.warn('Firebase Firestore background sync warning:', e);
     } finally {
       this.isSyncing = false;
     }
   }
 
-  // Push all local clinical data to PostgreSQL in Cloud SQL
+  // Push all local clinical data to Firebase Firestore
   static async syncAllToCloud(): Promise<void> {
     try {
       const patients = this.getPatients();
@@ -101,36 +70,18 @@ export class ClinicalDatabase {
       const appointments = this.getAppointments();
       const payments = this.getPayments();
       const cashSession = this.getCashSession();
+      const settings = this.getClinicSettings();
 
       await Promise.allSettled([
-        fetch('/api/patients/bulk-sync', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ patients })
-        }),
-        fetch('/api/budgets/bulk-sync', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ budgets })
-        }),
-        fetch('/api/appointments/bulk-sync', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ appointments })
-        }),
-        fetch('/api/payments/bulk-sync', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ payments })
-        }),
-        fetch('/api/cash-session', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(cashSession)
-        })
+        ...patients.map(p => FirestoreService.savePatient(p)),
+        ...budgets.map(b => FirestoreService.saveBudget(b)),
+        ...appointments.map(a => FirestoreService.saveAppointment(a)),
+        ...payments.map(pay => FirestoreService.savePayment(pay)),
+        FirestoreService.saveCashSession(cashSession),
+        FirestoreService.saveClinicSettings(settings)
       ]);
     } catch (e) {
-      console.warn('Error pushing data to Cloud SQL:', e);
+      console.warn('Error pushing data to Firebase Firestore:', e);
     }
   }
 
@@ -152,14 +103,31 @@ export class ClinicalDatabase {
     try {
       localStorage.setItem(DB_KEYS.PATIENTS, JSON.stringify(patients));
       this.updateLastSync();
-      // Async sync to Cloud SQL
-      fetch('/api/patients/bulk-sync', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ patients })
-      }).catch(err => console.warn('Could not sync patients to Cloud SQL:', err));
+      // Async sync to Firestore
+      patients.forEach(p => {
+        FirestoreService.savePatient(p).catch(err => console.warn('Could not sync patient to Firestore:', err));
+      });
     } catch (e) {
       console.error('Error saving patients to DB:', e);
+    }
+  }
+
+  static savePatient(patient: Patient): void {
+    try {
+      const current = this.getPatients();
+      const index = current.findIndex(p => p.id === patient.id);
+      let updated: Patient[];
+      if (index >= 0) {
+        updated = [...current];
+        updated[index] = patient;
+      } else {
+        updated = [patient, ...current];
+      }
+      localStorage.setItem(DB_KEYS.PATIENTS, JSON.stringify(updated));
+      this.updateLastSync();
+      FirestoreService.savePatient(patient).catch(err => console.warn('Could not sync patient to Firestore:', err));
+    } catch (e) {
+      console.error('Error saving single patient to DB:', e);
     }
   }
 
@@ -169,11 +137,8 @@ export class ClinicalDatabase {
       const updated = current.filter(p => p.id !== patientId);
       localStorage.setItem(DB_KEYS.PATIENTS, JSON.stringify(updated));
       this.updateLastSync();
-      // Async sync delete to Cloud SQL backend
-      fetch(`/api/patients/${patientId}`, {
-        method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' }
-      }).catch(err => console.warn('Could not sync patient deletion to Cloud SQL:', err));
+      // Async sync delete to Firestore
+      FirestoreService.deletePatient(patientId).catch(err => console.warn('Could not sync patient deletion to Firestore:', err));
       return updated;
     } catch (e) {
       console.error('Error deleting patient from DB:', e);
@@ -199,14 +164,30 @@ export class ClinicalDatabase {
     try {
       localStorage.setItem(DB_KEYS.BUDGETS, JSON.stringify(budgets));
       this.updateLastSync();
-      // Async sync to Cloud SQL
-      fetch('/api/budgets/bulk-sync', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ budgets })
-      }).catch(err => console.warn('Could not sync budgets to Cloud SQL:', err));
+      budgets.forEach(b => {
+        FirestoreService.saveBudget(b).catch(err => console.warn('Could not sync budget to Firestore:', err));
+      });
     } catch (e) {
       console.error('Error saving budgets to DB:', e);
+    }
+  }
+
+  static saveBudget(budget: TreatmentBudget): void {
+    try {
+      const current = this.getBudgets();
+      const index = current.findIndex(b => b.id === budget.id);
+      let updated: TreatmentBudget[];
+      if (index >= 0) {
+        updated = [...current];
+        updated[index] = budget;
+      } else {
+        updated = [budget, ...current];
+      }
+      localStorage.setItem(DB_KEYS.BUDGETS, JSON.stringify(updated));
+      this.updateLastSync();
+      FirestoreService.saveBudget(budget).catch(err => console.warn('Could not sync budget to Firestore:', err));
+    } catch (e) {
+      console.error('Error saving single budget to DB:', e);
     }
   }
 
@@ -216,11 +197,7 @@ export class ClinicalDatabase {
       const updated = current.filter(b => b.id !== budgetId);
       localStorage.setItem(DB_KEYS.BUDGETS, JSON.stringify(updated));
       this.updateLastSync();
-      // Async sync delete to Cloud SQL backend
-      fetch(`/api/budgets/${budgetId}`, {
-        method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' }
-      }).catch(err => console.warn('Could not sync budget deletion to Cloud SQL:', err));
+      FirestoreService.deleteBudget(budgetId).catch(err => console.warn('Could not sync budget deletion to Firestore:', err));
       return updated;
     } catch (e) {
       console.error('Error deleting budget from DB:', e);
@@ -246,14 +223,44 @@ export class ClinicalDatabase {
     try {
       localStorage.setItem(DB_KEYS.APPOINTMENTS, JSON.stringify(appointments));
       this.updateLastSync();
-      // Async sync to Cloud SQL
-      fetch('/api/appointments/bulk-sync', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ appointments })
-      }).catch(err => console.warn('Could not sync appointments to Cloud SQL:', err));
+      appointments.forEach(a => {
+        FirestoreService.saveAppointment(a).catch(err => console.warn('Could not sync appointment to Firestore:', err));
+      });
     } catch (e) {
       console.error('Error saving appointments to DB:', e);
+    }
+  }
+
+  static saveAppointment(appointment: Appointment): void {
+    try {
+      const current = this.getAppointments();
+      const index = current.findIndex(a => a.id === appointment.id);
+      let updated: Appointment[];
+      if (index >= 0) {
+        updated = [...current];
+        updated[index] = appointment;
+      } else {
+        updated = [appointment, ...current];
+      }
+      localStorage.setItem(DB_KEYS.APPOINTMENTS, JSON.stringify(updated));
+      this.updateLastSync();
+      FirestoreService.saveAppointment(appointment).catch(err => console.warn('Could not sync appointment to Firestore:', err));
+    } catch (e) {
+      console.error('Error saving single appointment to DB:', e);
+    }
+  }
+
+  static deleteAppointment(appointmentId: string): Appointment[] {
+    try {
+      const current = this.getAppointments();
+      const updated = current.filter(a => a.id !== appointmentId);
+      localStorage.setItem(DB_KEYS.APPOINTMENTS, JSON.stringify(updated));
+      this.updateLastSync();
+      FirestoreService.deleteAppointment(appointmentId).catch(err => console.warn('Could not sync appointment deletion to Firestore:', err));
+      return updated;
+    } catch (e) {
+      console.error('Error deleting appointment from DB:', e);
+      return this.getAppointments();
     }
   }
 
@@ -261,8 +268,11 @@ export class ClinicalDatabase {
   static getPayments(): PaymentTransaction[] {
     try {
       const stored = localStorage.getItem(DB_KEYS.PAYMENTS);
-      if (stored) {
+      if (stored !== null) {
         return JSON.parse(stored);
+      }
+      if (localStorage.getItem(DB_KEYS.PAYMENTS_INITIALIZED) === 'true') {
+        return [];
       }
     } catch (e) {
       console.error('Error loading payments from DB:', e);
@@ -274,15 +284,59 @@ export class ClinicalDatabase {
   static savePayments(payments: PaymentTransaction[]): void {
     try {
       localStorage.setItem(DB_KEYS.PAYMENTS, JSON.stringify(payments));
+      localStorage.setItem(DB_KEYS.PAYMENTS_INITIALIZED, 'true');
       this.updateLastSync();
-      // Async sync to Cloud SQL
-      fetch('/api/payments/bulk-sync', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ payments })
-      }).catch(err => console.warn('Could not sync payments to Cloud SQL:', err));
+      if (payments.length === 0) {
+        FirestoreService.resetPayments().catch(err => console.warn('Could not reset payments in Firestore:', err));
+      } else {
+        payments.forEach(pay => {
+          FirestoreService.savePayment(pay).catch(err => console.warn('Could not sync payment to Firestore:', err));
+        });
+      }
     } catch (e) {
       console.error('Error saving payments to DB:', e);
+    }
+  }
+
+  static savePayment(payment: PaymentTransaction): void {
+    try {
+      const current = this.getPayments();
+      const updated = [payment, ...current];
+      localStorage.setItem(DB_KEYS.PAYMENTS, JSON.stringify(updated));
+      localStorage.setItem(DB_KEYS.PAYMENTS_INITIALIZED, 'true');
+      this.updateLastSync();
+      FirestoreService.savePayment(payment).catch(err => console.warn('Could not sync payment to Firestore:', err));
+    } catch (e) {
+      console.error('Error saving single payment to DB:', e);
+    }
+  }
+
+  static resetMonthlyEarnings(): { success: boolean; message: string } {
+    try {
+      localStorage.setItem(DB_KEYS.PAYMENTS, JSON.stringify([]));
+      localStorage.setItem(DB_KEYS.PAYMENTS_INITIALIZED, 'true');
+
+      const currentSession = this.getCashSession();
+      const opening = typeof currentSession?.openingCash === 'number' ? currentSession.openingCash : 120000;
+      const updatedSession: CashRegisterSession = {
+        ...currentSession,
+        totalCashIncome: 0,
+        totalCardIncome: 0,
+        totalTransferIncome: 0,
+        totalInsuranceIncome: 0,
+        totalExpenses: 0,
+        expectedCashTotal: opening
+      };
+      localStorage.setItem(DB_KEYS.CASH_SESSION, JSON.stringify(updatedSession));
+      this.updateLastSync();
+
+      FirestoreService.resetPayments().catch(err => console.warn('Could not reset payments in Firestore:', err));
+      FirestoreService.saveCashSession(updatedSession).catch(err => console.warn('Could not sync reset cash session:', err));
+
+      return { success: true, message: 'Ganancias del mes reiniciadas a $0 exitosamente.' };
+    } catch (e) {
+      console.error('Error resetting monthly earnings:', e);
+      return { success: false, message: 'Error al reiniciar las ganancias.' };
     }
   }
 
@@ -304,14 +358,32 @@ export class ClinicalDatabase {
     try {
       localStorage.setItem(DB_KEYS.CASH_SESSION, JSON.stringify(session));
       this.updateLastSync();
-      // Async sync to Cloud SQL
-      fetch('/api/cash-session', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(session)
-      }).catch(err => console.warn('Could not sync cash session to Cloud SQL:', err));
+      FirestoreService.saveCashSession(session).catch(err => console.warn('Could not sync cash session to Firestore:', err));
     } catch (e) {
       console.error('Error saving cash session to DB:', e);
+    }
+  }
+
+  // Clinic Settings
+  static getClinicSettings(): ClinicSettings {
+    try {
+      const data = localStorage.getItem(DB_KEYS.CLINIC_SETTINGS);
+      if (data) {
+        return { ...DEFAULT_CLINIC_SETTINGS, ...JSON.parse(data) };
+      }
+    } catch (e) {
+      console.warn('Could not load clinic settings from DB, using defaults', e);
+    }
+    return DEFAULT_CLINIC_SETTINGS;
+  }
+
+  static saveClinicSettings(settings: ClinicSettings): void {
+    try {
+      localStorage.setItem(DB_KEYS.CLINIC_SETTINGS, JSON.stringify(settings));
+      this.updateLastSync();
+      FirestoreService.saveClinicSettings(settings).catch(err => console.warn('Could not sync settings to Firestore:', err));
+    } catch (e) {
+      console.error('Error saving clinic settings to DB:', e);
     }
   }
 
@@ -348,12 +420,23 @@ export class ClinicalDatabase {
     };
   }
 
-  // Export Full Database to JSON file
-  static exportDatabaseJSON(): void {
+  // Doctors
+  static getDoctors(): ProfessionalDoctor[] {
+    return INITIAL_DOCTORS;
+  }
+
+  static saveDoctors(doctors: ProfessionalDoctor[]): void {
+    // Persistence for doctors list
+  }
+
+  // Export Full Database string
+  static exportCompleteDatabase(): string {
     const data = {
-      version: '2.0.0',
+      version: '3.0.0',
       exportedAt: new Date().toISOString(),
-      engine: 'PostgreSQL / Cloud SQL',
+      engine: 'Firebase Firestore Cloud Database',
+      projectId: 'automatic-electron-x8chg',
+      clinicSettings: this.getClinicSettings(),
       patients: this.getPatients(),
       budgets: this.getBudgets(),
       appointments: this.getAppointments(),
@@ -363,12 +446,17 @@ export class ClinicalDatabase {
       doctors: INITIAL_DOCTORS,
       tariffs: INITIAL_TARIFFS
     };
+    return JSON.stringify(data, null, 2);
+  }
 
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  // Export Full Database to JSON file
+  static exportDatabaseJSON(): void {
+    const dataString = this.exportCompleteDatabase();
+    const blob = new Blob([dataString], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `cima_dental_cloudsql_backup_${new Date().toISOString().split('T')[0]}.json`;
+    a.download = `daaron_dental_firestore_backup_${new Date().toISOString().split('T')[0]}.json`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -379,6 +467,9 @@ export class ClinicalDatabase {
   static importDatabaseJSON(jsonContent: string): { success: boolean; message: string } {
     try {
       const parsed = JSON.parse(jsonContent);
+      if (parsed.clinicSettings) {
+        this.saveClinicSettings(parsed.clinicSettings);
+      }
       if (parsed.patients && Array.isArray(parsed.patients)) {
         this.savePatients(parsed.patients);
       }
@@ -395,7 +486,7 @@ export class ClinicalDatabase {
         this.saveCashSession(parsed.cashSession);
       }
       this.syncAllToCloud();
-      return { success: true, message: 'Base de datos restaurada y sincronizada con PostgreSQL.' };
+      return { success: true, message: 'Base de datos restaurada y sincronizada con Firebase Firestore.' };
     } catch (err) {
       return { success: false, message: 'El archivo JSON no tiene un formato válido.' };
     }
@@ -403,11 +494,13 @@ export class ClinicalDatabase {
 
   // Reset to initial demo database
   static resetToDemoData(): void {
+    this.saveClinicSettings(DEFAULT_CLINIC_SETTINGS);
     this.savePatients(INITIAL_PATIENTS);
     this.saveBudgets(INITIAL_BUDGETS);
     this.saveAppointments(INITIAL_APPOINTMENTS);
     this.savePayments(INITIAL_PAYMENTS);
     this.saveCashSession(INITIAL_CASH_SESSION);
-    this.syncAllToCloud();
+    FirestoreService.resetDatabase().catch(err => console.warn('Could not reset Firestore:', err));
   }
 }
+

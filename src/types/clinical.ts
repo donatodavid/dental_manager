@@ -114,8 +114,8 @@ export interface Patient {
   documentId: string; // DNI / RUT / ID
   firstName: string;
   lastName: string;
-  birthDate: string;
-  gender: 'M' | 'F' | 'OTHER';
+  birthDate?: string;
+  gender?: 'M' | 'F' | 'OTHER';
   phone: string;
   whatsapp: string;
   email: string;
@@ -208,6 +208,8 @@ export interface TreatmentBudget {
   budgetNumber: string;
   patientId: string;
   patientName: string;
+  patientPhone?: string;
+  patientRut?: string;
   doctorId: string;
   doctorName: string;
   branchId: string;
@@ -289,4 +291,18 @@ export interface ProfessionalDoctor {
   commissionRatePercent: number;
   color: string;
   avatarUrl: string;
+}
+
+export interface ClinicSettings {
+  name: string;
+  tagline: string;
+  address: string;
+  city: string;
+  region: string;
+  phone: string;
+  email: string;
+  rut: string;
+  logoUrl: string;
+  hours: string;
+  defaultDoctorId: string;
 }

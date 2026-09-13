@@ -36,9 +36,12 @@ import {
   Download,
   AlertTriangle,
   Loader2,
-  X
+  X,
+  Phone,
+  Pencil
 } from 'lucide-react';
-import { downloadBudgetPdf } from '../../utils/budgetExporter';
+import { downloadBudgetPdf, shareBudgetViaWhatsAppPdf } from '../../utils/budgetExporter';
+import { ClinicalDatabase } from '../../services/db';
 
 interface BillingDashboardProps {
   budgets: TreatmentBudget[];
@@ -76,6 +79,8 @@ export const BillingDashboard: React.FC<BillingDashboardProps> = ({
   const [activeTab, setActiveTab] = useState<'BUDGETS' | 'PAYMENTS'>('BUDGETS');
   const [searchTerm, setSearchTerm] = useState('');
   const [showBudgetModal, setShowBudgetModal] = useState(false);
+  const [budgetToEdit, setBudgetToEdit] = useState<TreatmentBudget | null>(null);
+  const [budgetToDelete, setBudgetToDelete] = useState<TreatmentBudget | null>(null);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [selectedBudgetForPayment, setSelectedBudgetForPayment] = useState<TreatmentBudget | undefined>(undefined);
   const [selectedPatientForPayment, setSelectedPatientForPayment] = useState<Patient | undefined>(undefined);
@@ -143,34 +148,27 @@ export const BillingDashboard: React.FC<BillingDashboardProps> = ({
     }
   };
 
-  // WhatsApp quick share handler
-  const handleSendWhatsApp = (budget: TreatmentBudget) => {
-    const patient = patients.find(p => p.id === budget.patientId);
-    const phone = patient?.whatsapp || patient?.phone || '';
-    const cleanPhone = phone.replace(/[^0-9]/g, '');
+  const [sharingBudgetId, setSharingBudgetId] = useState<string | null>(null);
+  const [waToastMessage, setWaToastMessage] = useState<string | null>(null);
 
-    const itemsList = budget.items
-      .map(i => `• ${i.toothNumber ? `[Pieza ${i.toothNumber}] ` : ''}${i.description} (${i.quantity}x) - $${i.patientCopay.toLocaleString('es-CL')}`)
-      .join('\n');
+  // WhatsApp quick share handler (Official PDF document, no written text)
+  const handleSendWhatsApp = async (budget: TreatmentBudget) => {
+    try {
+      setSharingBudgetId(budget.id);
+      const patientObj = patients.find(p => p.id === budget.patientId);
+      const doctorObj = doctors.find(d => d.id === budget.doctorId);
+      const settings = ClinicalDatabase.getClinicSettings();
 
-    const message = `🦷 *PRESUPUESTO ODONTOLÓGICO - DAARON CONSULTA DENTAL*\n\n` +
-      `Estimado(a) *${budget.patientName}*,\n` +
-      `Le adjuntamos el detalle de su presupuesto dental:\n\n` +
-      `📋 *N° Presupuesto:* ${budget.budgetNumber}\n` +
-      `👨‍⚕️ *Doctor(a):* ${budget.doctorName}\n` +
-      `📅 *Fecha:* ${budget.createdAt}\n\n` +
-      `📝 *Tratamientos Presupuestados:*\n${itemsList}\n\n` +
-      `💵 *Subtotal:* $${budget.subtotal.toLocaleString('es-CL')}\n` +
-      (budget.discountTotal > 0 ? `🏷️ *Descuento:* -$${budget.discountTotal.toLocaleString('es-CL')}\n` : '') +
-      `💰 *TOTAL A PAGAR:* $${budget.totalPatient.toLocaleString('es-CL')}\n\n` +
-      (budget.notes ? `📌 *Condiciones:* ${budget.notes}\n\n` : '') +
-      `Quedamos a su disposición para coordinar sus próximas horas. ¡Muchas gracias!`;
-
-    const url = cleanPhone
-      ? `https://api.whatsapp.com/send?phone=${cleanPhone}&text=${encodeURIComponent(message)}`
-      : `https://api.whatsapp.com/send?text=${encodeURIComponent(message)}`;
-
-    window.open(url, '_blank');
+      const result = await shareBudgetViaWhatsAppPdf(budget, patientObj, doctorObj, settings);
+      if (result.message) {
+        setWaToastMessage(result.message);
+        setTimeout(() => setWaToastMessage(null), 6500);
+      }
+    } catch (err: any) {
+      console.error('Error sharing budget PDF via WhatsApp:', err);
+    } finally {
+      setSharingBudgetId(null);
+    }
   };
 
   const handleConfirmResetEarnings = () => {
@@ -183,6 +181,23 @@ export const BillingDashboard: React.FC<BillingDashboardProps> = ({
   return (
     <div className="flex flex-col gap-6 font-sans">
       
+      {/* WhatsApp Image Notification Toast */}
+      {waToastMessage && (
+        <div className="bg-emerald-900 text-emerald-50 px-4 py-3 rounded-2xl shadow-lg border border-emerald-700 flex items-center justify-between gap-3 text-xs sm:text-sm animate-in slide-in-from-top-2">
+          <div className="flex items-center gap-2.5">
+            <span className="p-1 bg-emerald-500/20 text-emerald-300 rounded-lg font-bold text-base">📸</span>
+            <span className="font-medium">{waToastMessage}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setWaToastMessage(null)}
+            className="p-1 hover:bg-emerald-800 text-emerald-300 rounded-lg cursor-pointer"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
       {/* Top Financial KPI Ribbon */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         
@@ -345,8 +360,11 @@ export const BillingDashboard: React.FC<BillingDashboardProps> = ({
 
               <button
                 type="button"
-                onClick={() => setShowBudgetModal(true)}
-                className="py-2 px-4 bg-slate-900 hover:bg-slate-800 text-white rounded-full text-xs font-bold flex items-center gap-1.5 shadow-sm transition-all active:scale-95"
+                onClick={() => {
+                  setBudgetToEdit(null);
+                  setShowBudgetModal(true);
+                }}
+                className="py-2 px-4 bg-slate-900 hover:bg-slate-800 text-white rounded-full text-xs font-bold flex items-center gap-1.5 shadow-sm transition-all active:scale-95 cursor-pointer"
               >
                 <Plus className="w-4 h-4" />
                 <span>+ Nuevo Presupuesto</span>
@@ -375,6 +393,15 @@ export const BillingDashboard: React.FC<BillingDashboardProps> = ({
                           </span>
                         </div>
                         <h4 className="text-base font-bold text-slate-900 mt-2">{b.patientName}</h4>
+                        {(() => {
+                          const phoneNum = b.patientPhone || patients.find(p => p.id === b.patientId)?.phone;
+                          return phoneNum ? (
+                            <p className="text-xs text-teal-700 font-medium flex items-center gap-1 mt-0.5">
+                              <Phone className="w-3 h-3 text-teal-600 inline" />
+                              <span>{phoneNum}</span>
+                            </p>
+                          ) : null;
+                        })()}
                         <p className="text-xs text-slate-500 mt-0.5 font-medium">Tratante: {b.doctorName}</p>
                       </div>
 
@@ -464,15 +491,26 @@ export const BillingDashboard: React.FC<BillingDashboardProps> = ({
                         <Printer className="w-4 h-4 text-blue-600" />
                       </button>
 
-                      {/* Delete Budget CTA */}
+                      {/* Edit Budget CTA */}
                       {activeRole !== 'PATIENT' && (
                         <button
                           type="button"
                           onClick={() => {
-                            if (window.confirm(`¿Estás seguro de eliminar el presupuesto ${b.budgetNumber} de ${b.patientName}? Esta acción no se puede deshacer.`)) {
-                              onDeleteBudget?.(b.id);
-                            }
+                            setBudgetToEdit(b);
+                            setShowBudgetModal(true);
                           }}
+                          className="p-2 bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 rounded-full text-xs transition-all cursor-pointer"
+                          title="Editar Presupuesto"
+                        >
+                          <Pencil className="w-4 h-4 text-amber-600" />
+                        </button>
+                      )}
+
+                      {/* Delete Budget CTA */}
+                      {activeRole !== 'PATIENT' && onDeleteBudget && (
+                        <button
+                          type="button"
+                          onClick={() => setBudgetToDelete(b)}
                           className="p-2 bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 rounded-full text-xs transition-all cursor-pointer"
                           title="Eliminar Presupuesto"
                         >
@@ -667,15 +705,26 @@ export const BillingDashboard: React.FC<BillingDashboardProps> = ({
         </div>
       )}
 
-      {/* MODAL: Creador de Presupuestos */}
+      {/* MODAL: Creador / Editor de Presupuestos */}
       <BudgetBuilderModal
         isOpen={showBudgetModal}
-        onClose={() => setShowBudgetModal(false)}
-        onSaveBudget={onSaveBudget}
+        onClose={() => {
+          setShowBudgetModal(false);
+          setBudgetToEdit(null);
+        }}
+        onSaveBudget={(budget, shouldPrint, shouldWa) => {
+          onSaveBudget(budget);
+          setShowBudgetModal(false);
+          setBudgetToEdit(null);
+          if (shouldPrint) {
+            setSelectedBudgetForPrint(budget);
+          }
+        }}
         patients={patients}
         doctors={doctors}
         branches={branches}
         tariffs={tariffs}
+        budgetToEdit={budgetToEdit}
       />
 
       {/* MODAL: Checkout / Cobro */}
@@ -719,7 +768,68 @@ export const BillingDashboard: React.FC<BillingDashboardProps> = ({
             setSelectedBudgetForPrint(null);
             onDeleteBudget?.(id);
           }}
+          onEditBudget={(b) => {
+            setSelectedBudgetForPrint(null);
+            setBudgetToEdit(b);
+            setShowBudgetModal(true);
+          }}
         />
+      )}
+
+      {/* MODAL: Confirmación de Eliminación de Presupuesto */}
+      {budgetToDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs animate-in fade-in">
+          <div className="bg-white border border-slate-200 w-full max-w-md rounded-3xl shadow-2xl p-6 flex flex-col gap-4">
+            <div className="flex items-start gap-3.5">
+              <div className="w-11 h-11 rounded-2xl bg-rose-50 border border-rose-200 flex items-center justify-center text-rose-600 shrink-0 shadow-xs">
+                <Trash2 className="w-5 h-5" />
+              </div>
+              <div className="flex-1">
+                <h3 className="font-bold text-base text-slate-900">
+                  ¿Eliminar presupuesto?
+                </h3>
+                <p className="text-xs text-slate-600 mt-1">
+                  ¿Estás seguro de que deseas eliminar el presupuesto <strong className="text-slate-900 font-mono">{budgetToDelete.budgetNumber}</strong> de <strong className="text-slate-800">{budgetToDelete.patientName}</strong>?
+                </p>
+                <div className="flex items-center gap-2 mt-2">
+                  <span className="text-xs font-mono font-bold px-2.5 py-1 rounded-lg bg-slate-100 text-slate-800 border border-slate-200">
+                    Total: ${(budgetToDelete.totalPatient || 0).toLocaleString('es-CL')}
+                  </span>
+                  <span className="text-[11px] text-slate-500">
+                    ({budgetToDelete.items.length} tratamientos)
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-rose-50 border border-rose-200/80 p-3.5 rounded-2xl text-xs text-rose-700 leading-relaxed">
+              ⚠️ <strong>Advertencia:</strong> Esta acción no se puede deshacer y removerá este presupuesto del historial contable y clínico.
+            </div>
+
+            <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setBudgetToDelete(null)}
+                className="px-4 py-2 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold transition-all cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (onDeleteBudget) {
+                    onDeleteBudget(budgetToDelete.id);
+                  }
+                  setBudgetToDelete(null);
+                }}
+                className="px-4 py-2 rounded-full bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold flex items-center gap-1.5 shadow-sm transition-all active:scale-95 cursor-pointer"
+              >
+                <Trash2 className="w-4 h-4" />
+                <span>Sí, Eliminar Presupuesto</span>
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
     </div>

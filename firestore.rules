@@ -1,0 +1,71 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isValidPatient(data) {
+      return data.firstName is string && data.firstName.size() > 0
+        && data.lastName is string && data.lastName.size() > 0;
+    }
+
+    function isValidBudget(data) {
+      return data.budgetNumber is string && data.totalPatient is number;
+    }
+
+    function isValidAppointment(data) {
+      return data.date is string && data.startTime is string;
+    }
+
+    function isValidPayment(data) {
+      return data.amount is number && data.receiptNumber is string;
+    }
+
+    function isValidCashSession(data) {
+      return data.branchId is string && data.openingCash is number;
+    }
+
+    match /patients/{patientId} {
+      allow read: if true;
+      allow create: if isValidPatient(request.resource.data);
+      allow update: if isValidPatient(request.resource.data);
+      allow delete: if true;
+    }
+
+    match /budgets/{budgetId} {
+      allow read: if true;
+      allow create: if isValidBudget(request.resource.data);
+      allow update: if isValidBudget(request.resource.data);
+      allow delete: if true;
+    }
+
+    match /appointments/{appointmentId} {
+      allow read: if true;
+      allow create: if isValidAppointment(request.resource.data);
+      allow update: if isValidAppointment(request.resource.data);
+      allow delete: if true;
+    }
+
+    match /payments/{paymentId} {
+      allow read: if true;
+      allow create: if isValidPayment(request.resource.data);
+      allow update: if isValidPayment(request.resource.data);
+      allow delete: if true;
+    }
+
+    match /cash_sessions/{sessionId} {
+      allow read: if true;
+      allow create: if isValidCashSession(request.resource.data);
+      allow update: if isValidCashSession(request.resource.data);
+      allow delete: if true;
+    }
+
+    match /clinic_settings/{settingId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    match /users/{userId} {
+      allow read: if true;
+      allow write: if true;
+    }
+  }
+}

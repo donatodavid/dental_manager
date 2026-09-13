@@ -48,8 +48,6 @@ export const PatientList: React.FC<PatientListProps> = ({
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [documentId, setDocumentId] = useState('');
-  const [birthDate, setBirthDate] = useState('1990-01-01');
-  const [gender, setGender] = useState<'M' | 'F' | 'OTHER'>('F');
   const [phone, setPhone] = useState('+56 9 ');
   const [email, setEmail] = useState('');
   const [insuranceProvider, setInsuranceProvider] = useState('Particular / Sin Seguro');
@@ -74,11 +72,6 @@ export const PatientList: React.FC<PatientListProps> = ({
     if (filterTag === 'ALLERGIES') return p.allergies.length > 0;
     if (filterTag === 'HYPERTENSION') return p.medicalBackground.hypertension;
     if (filterTag === 'DIABETES') return p.medicalBackground.diabetes;
-    if (filterTag === 'PEDIATRIC') {
-      const birthYear = new Date(p.birthDate).getFullYear();
-      const currentYear = new Date().getFullYear();
-      return (currentYear - birthYear) < 16;
-    }
 
     return true;
   });
@@ -100,8 +93,6 @@ export const PatientList: React.FC<PatientListProps> = ({
       documentId,
       firstName,
       lastName,
-      birthDate,
-      gender,
       phone,
       whatsapp: phone,
       email: email || `${firstName.toLowerCase()}.${lastName.toLowerCase()}@email.com`,
@@ -209,12 +200,12 @@ export const PatientList: React.FC<PatientListProps> = ({
             </button>
             <button
               type="button"
-              onClick={() => setFilterTag('PEDIATRIC')}
+              onClick={() => setFilterTag('DIABETES')}
               className={`px-3.5 py-1.5 rounded-full font-semibold transition-all ${
-                filterTag === 'PEDIATRIC' ? 'bg-amber-600 text-white shadow-sm' : 'text-slate-600 hover:text-slate-900'
+                filterTag === 'DIABETES' ? 'bg-amber-600 text-white shadow-sm' : 'text-slate-600 hover:text-slate-900'
               }`}
             >
-              Pediátricos
+              Diabéticos
             </button>
           </div>
 
@@ -441,7 +432,7 @@ export const PatientList: React.FC<PatientListProps> = ({
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="text-xs font-semibold text-slate-700 block mb-1">RUT / DNI / Pasaporte *</label>
                   <input
@@ -455,31 +446,6 @@ export const PatientList: React.FC<PatientListProps> = ({
                 </div>
 
                 <div>
-                  <label className="text-xs font-semibold text-slate-700 block mb-1">Fecha Nacimiento</label>
-                  <input
-                    type="date"
-                    value={birthDate}
-                    onChange={(e) => setBirthDate(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs text-slate-900 focus:outline-none focus:border-blue-500 focus:bg-white"
-                  />
-                </div>
-
-                <div>
-                  <label className="text-xs font-semibold text-slate-700 block mb-1">Género</label>
-                  <select
-                    value={gender}
-                    onChange={(e) => setGender(e.target.value as any)}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs text-slate-900 focus:outline-none focus:border-blue-500 focus:bg-white"
-                  >
-                    <option value="F">Femenino</option>
-                    <option value="M">Masculino</option>
-                    <option value="OTHER">Otro / No especifica</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
                   <label className="text-xs font-semibold text-slate-700 block mb-1">Teléfono / WhatsApp *</label>
                   <input
                     type="text"
@@ -490,23 +456,17 @@ export const PatientList: React.FC<PatientListProps> = ({
                     className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs text-slate-900 focus:outline-none focus:border-blue-500 focus:bg-white"
                   />
                 </div>
+              </div>
 
-                <div>
-                  <label className="text-xs font-semibold text-slate-700 block mb-1">Previsión / Seguro Médico</label>
-                  <select
-                    value={insuranceProvider}
-                    onChange={(e) => setInsuranceProvider(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs text-slate-900 focus:outline-none focus:border-blue-500 focus:bg-white"
-                  >
-                    <option value="Particular / Sin Seguro">Particular / Sin Seguro</option>
-                    <option value="Colmena Golden Cross">Colmena Golden Cross</option>
-                    <option value="Banmédica">Banmédica</option>
-                    <option value="Cruz Blanca">Cruz Blanca</option>
-                    <option value="Consalud">Consalud</option>
-                    <option value="Fonasa">Fonasa</option>
-                    <option value="Metlife Dental">Metlife Dental Reembolso</option>
-                  </select>
-                </div>
+              <div>
+                <label className="text-xs font-semibold text-slate-700 block mb-1">Correo Electrónico (Opcional)</label>
+                <input
+                  type="email"
+                  placeholder="paciente@email.com"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs text-slate-900 focus:outline-none focus:border-blue-500 focus:bg-white"
+                />
               </div>
 
               <div>

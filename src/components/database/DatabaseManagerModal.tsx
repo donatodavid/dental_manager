@@ -75,21 +75,21 @@ export const DatabaseManagerModal: React.FC<DatabaseManagerModalProps> = ({
             </div>
             <div>
               <h3 className="font-bold text-base sm:text-lg text-slate-100 flex items-center gap-2">
-                Base de Datos PostgreSQL (Cloud SQL)
+                Base de Datos en la Nube (Firebase Firestore)
                 <span className="text-[10px] bg-emerald-500/20 text-emerald-300 px-2 py-0.5 rounded-full font-bold border border-emerald-500/30 flex items-center gap-1">
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                  POSTGRESQL CONECTADO
+                  FIRESTORE CONECTADO
                 </span>
               </h3>
               <p className="text-xs text-slate-400">
-                Almacenamiento relacional en PostgreSQL / Cloud SQL con soporte sin conexión y backup JSON.
+                Almacenamiento persistente en Google Cloud Firestore con sincronización en tiempo real multidispositivo y respaldo local.
               </p>
             </div>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-all"
+            className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-all cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>

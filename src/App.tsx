@@ -9,7 +9,8 @@ import {
   UserRole,
   Branch,
   ProfessionalDoctor,
-  ClinicalEvolution
+  ClinicalEvolution,
+  ClinicSettings
 } from './types/clinical';
 import { 
   INITIAL_PATIENTS, 
@@ -22,11 +23,13 @@ import {
   INITIAL_APPOINTMENTS 
 } from './data/initialData';
 import { ClinicalDatabase } from './services/db';
+import { FirestoreService } from './services/firestoreService';
 import { PatientList } from './components/patients/PatientList';
 import { PatientDetailModal } from './components/patients/PatientDetailModal';
 import { AgendaView } from './components/agenda/AgendaView';
 import { BillingDashboard } from './components/billing/BillingDashboard';
 import { OverviewDashboard } from './components/dashboard/OverviewDashboard';
+import { ConfigurationPanel } from './components/settings/ConfigurationPanel';
 import { ArchitectureGuideModal } from './components/architecture/ArchitectureGuideModal';
 import { DatabaseManagerModal } from './components/database/DatabaseManagerModal';
 import { 
@@ -49,11 +52,13 @@ import {
   Menu,
   X,
   Database,
-  LayoutDashboard
+  LayoutDashboard,
+  Settings
 } from 'lucide-react';
 
 export default function App() {
   // Master Domain State backed by ClinicalDatabase (Local Persistence)
+  const [clinicSettings, setClinicSettings] = useState<ClinicSettings>(() => ClinicalDatabase.getClinicSettings());
   const [patients, setPatients] = useState<Patient[]>(() => ClinicalDatabase.getPatients());
   const [doctors, setDoctors] = useState<ProfessionalDoctor[]>(INITIAL_DOCTORS);
   const [branches, setBranches] = useState<Branch[]>(INITIAL_BRANCHES);
@@ -64,7 +69,7 @@ export default function App() {
   const [appointments, setAppointments] = useState<Appointment[]>(() => ClinicalDatabase.getAppointments());
 
   // App Navigation & Context State
-  const [activeTab, setActiveTab] = useState<'OVERVIEW' | 'PATIENTS' | 'AGENDA' | 'BILLING'>('OVERVIEW');
+  const [activeTab, setActiveTab] = useState<'OVERVIEW' | 'PATIENTS' | 'AGENDA' | 'BILLING' | 'SETTINGS'>('OVERVIEW');
   const [selectedPatientForDetail, setSelectedPatientForDetail] = useState<Patient | null>(null);
   const [activeRole, setActiveRole] = useState<UserRole>('ADMIN');
   const [currentBranchId, setCurrentBranchId] = useState<string>('branch-1');
@@ -78,6 +83,7 @@ export default function App() {
 
   // Reload database state after import, sync, or reset
   const handleReloadDatabase = () => {
+    setClinicSettings(ClinicalDatabase.getClinicSettings());
     setPatients(ClinicalDatabase.getPatients());
     setBudgets(ClinicalDatabase.getBudgets());
     setAppointments(ClinicalDatabase.getAppointments());
@@ -85,11 +91,75 @@ export default function App() {
     setCashSession(ClinicalDatabase.getCashSession());
   };
 
-  // Initialize Cloud SQL synchronization on mount
+  // Initialize Firebase Firestore database and setup real-time multi-device sync
   useEffect(() => {
     ClinicalDatabase.initCloudSync().then(() => {
       handleReloadDatabase();
     });
+
+    // Real-time synchronization listeners across clients/tabs
+    const unsubPatients = FirestoreService.subscribePatients((remotePatients) => {
+      if (remotePatients && remotePatients.length > 0) {
+        setPatients(remotePatients);
+        try {
+          localStorage.setItem('cima_db_patients_v3', JSON.stringify(remotePatients));
+        } catch {}
+      }
+    });
+
+    const unsubBudgets = FirestoreService.subscribeBudgets((remoteBudgets) => {
+      if (remoteBudgets && remoteBudgets.length > 0) {
+        setBudgets(remoteBudgets);
+        try {
+          localStorage.setItem('cima_db_budgets_v3', JSON.stringify(remoteBudgets));
+        } catch {}
+      }
+    });
+
+    const unsubAppointments = FirestoreService.subscribeAppointments((remoteApts) => {
+      if (remoteApts && remoteApts.length > 0) {
+        setAppointments(remoteApts);
+        try {
+          localStorage.setItem('cima_db_appointments_v3', JSON.stringify(remoteApts));
+        } catch {}
+      }
+    });
+
+    const unsubPayments = FirestoreService.subscribePayments((remotePayments) => {
+      if (remotePayments) {
+        setPayments(remotePayments);
+        try {
+          localStorage.setItem('cima_db_payments_v3', JSON.stringify(remotePayments));
+        } catch {}
+      }
+    });
+
+    const unsubCash = FirestoreService.subscribeCashSessions((remoteCash) => {
+      if (remoteCash) {
+        setCashSession(remoteCash);
+        try {
+          localStorage.setItem('cima_db_cash_session_v3', JSON.stringify(remoteCash));
+        } catch {}
+      }
+    });
+
+    const unsubSettings = FirestoreService.subscribeClinicSettings((remoteSettings) => {
+      if (remoteSettings) {
+        setClinicSettings(remoteSettings);
+        try {
+          localStorage.setItem('cima_db_clinic_settings_v3', JSON.stringify(remoteSettings));
+        } catch {}
+      }
+    });
+
+    return () => {
+      unsubPatients();
+      unsubBudgets();
+      unsubAppointments();
+      unsubPayments();
+      unsubCash();
+      unsubSettings();
+    };
   }, []);
 
   // Update a single patient in the list
@@ -144,43 +214,50 @@ export default function App() {
     });
   };
 
-  // Save new treatment budget AND automatically sync to patient's clinical file
-  const handleSaveBudget = (newBudget: TreatmentBudget) => {
-    // 1. Add budget to state & persist to Database
+  // Save treatment budget (create or update) AND automatically sync to patient's clinical file
+  const handleSaveBudget = (savedBudget: TreatmentBudget) => {
+    const isExisting = budgets.some(b => b.id === savedBudget.id);
+
+    // 1. Add or update budget in state & persist to Database
     setBudgets(prev => {
-      const next = [newBudget, ...prev];
+      const exists = prev.some(b => b.id === savedBudget.id);
+      const next = exists
+        ? prev.map(b => b.id === savedBudget.id ? savedBudget : b)
+        : [savedBudget, ...prev];
       ClinicalDatabase.saveBudgets(next);
       return next;
     });
 
     // 2. Automatically register this budget into the patient's clinical evolution record (SOAP)
-    const targetPatient = patients.find(p => p.id === newBudget.patientId);
+    const targetPatient = patients.find(p => p.id === savedBudget.patientId);
     if (targetPatient) {
-      const teethTreatedList = newBudget.items
+      const teethTreatedList = savedBudget.items
         .map(i => i.toothNumber)
         .filter((n): n is number => typeof n === 'number' && n > 0);
 
-      const itemsSummary = newBudget.items
+      const itemsSummary = savedBudget.items
         .map(i => `${i.toothNumber && i.toothNumber > 0 ? `[Pz. ${i.toothNumber}] ` : ''}${i.description} ($${i.patientCopay.toLocaleString('es-CL')})`)
         .join(', ');
 
       const newEvolution: ClinicalEvolution = {
         id: `evo-budget-${Date.now()}`,
-        patientId: newBudget.patientId,
-        branchId: newBudget.branchId || currentBranchId,
-        date: newBudget.createdAt,
+        patientId: savedBudget.patientId,
+        branchId: savedBudget.branchId || currentBranchId,
+        date: savedBudget.createdAt,
         time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        doctorId: newBudget.doctorId,
-        doctorName: newBudget.doctorName,
+        doctorId: savedBudget.doctorId,
+        doctorName: savedBudget.doctorName,
         specialty: 'Odontología General & Planificación',
-        subjective: 'Presentación y emisión de presupuesto dental con selección de piezas clínicas.',
-        objective: `Plan de tratamiento presupuestado (${newBudget.items.length} ítems): ${itemsSummary}`,
-        assessment: `Presupuesto Folio ${newBudget.budgetNumber} registrado en ficha clínica.`,
-        plan: `Total Paciente: $${newBudget.totalPatient.toLocaleString('es-CL')} (Descuento aplicado: $${newBudget.discountTotal.toLocaleString('es-CL')}). Se programa agendamiento de sesiones.`,
+        subjective: isExisting
+          ? `Modificación y actualización de presupuesto dental Folio ${savedBudget.budgetNumber}.`
+          : 'Presentación y emisión de presupuesto dental con selección de piezas clínicas.',
+        objective: `Plan de tratamiento presupuestado (${savedBudget.items.length} ítems): ${itemsSummary}`,
+        assessment: `Presupuesto Folio ${savedBudget.budgetNumber} ${isExisting ? 'actualizado' : 'registrado'} en ficha clínica.`,
+        plan: `Total Paciente: $${savedBudget.totalPatient.toLocaleString('es-CL')} (Descuento aplicado: $${savedBudget.discountTotal.toLocaleString('es-CL')}). Se programa agendamiento de sesiones.`,
         signed: true,
         teethInvolved: teethTreatedList,
         prescriptions: [],
-        signatureStamp: `Dr(a). ${newBudget.doctorName} • Cód. Reg. ${newBudget.doctorId.toUpperCase()} • Ficha Digital Cima`
+        signatureStamp: `Dr(a). ${savedBudget.doctorName} • Cód. Reg. ${savedBudget.doctorId.toUpperCase()} • Ficha Digital Cima`
       };
 
       const updatedPatient: Patient = {
@@ -256,22 +333,9 @@ export default function App() {
 
   // Reset monthly earnings and accounting payments for new period
   const handleResetMonthlyEarnings = () => {
+    ClinicalDatabase.resetMonthlyEarnings();
     setPayments([]);
-    ClinicalDatabase.savePayments([]);
-    setCashSession(prev => {
-      const opening = typeof prev?.openingCash === 'number' ? prev.openingCash : 120000;
-      const next: CashRegisterSession = {
-        ...prev,
-        totalCashIncome: 0,
-        totalCardIncome: 0,
-        totalTransferIncome: 0,
-        totalInsuranceIncome: 0,
-        totalExpenses: 0,
-        expectedCashTotal: opening
-      };
-      ClinicalDatabase.saveCashSession(next);
-      return next;
-    });
+    setCashSession(ClinicalDatabase.getCashSession());
   };
 
   return (
@@ -282,23 +346,30 @@ export default function App() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-4">
           
           {/* Logo & Brand Identity */}
-          <div className="flex items-center gap-3">
+          <div 
+            onClick={() => setActiveTab('SETTINGS')}
+            className="flex items-center gap-3 cursor-pointer group"
+            title="Clic para configurar nombre, logo y dirección"
+          >
             <img 
-              src="/pagnina.png" 
-              alt="Daaron Consulta Dental" 
-              className="h-10 w-auto object-contain drop-shadow-xs hover:scale-105 transition-transform"
+              src={clinicSettings.logoUrl || "/pagnina.png"} 
+              alt={clinicSettings.name || "Consulta Dental"} 
+              className="h-10 w-auto object-contain drop-shadow-xs group-hover:scale-105 transition-transform"
+              onError={(e) => {
+                (e.target as HTMLImageElement).src = '/pagnina.png';
+              }}
             />
             <div>
               <div className="flex items-center gap-2">
-                <span className="font-extrabold text-base sm:text-lg tracking-tight text-slate-900">
-                  Daaron Consulta Dental
+                <span className="font-extrabold text-base sm:text-lg tracking-tight text-slate-900 group-hover:text-teal-700 transition-colors">
+                  {clinicSettings.name || "Daaron Consulta Dental"}
                 </span>
-                <span className="hidden sm:inline text-[10px] px-2.5 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200 font-bold">
-                  Linares
+                <span className="hidden sm:inline text-[10px] px-2.5 py-0.5 rounded-full bg-teal-50 text-teal-700 border border-teal-200 font-bold">
+                  {clinicSettings.city || "Linares"}
                 </span>
               </div>
               <p className="text-[11px] text-slate-500 font-medium hidden md:block">
-                Maipú 461, Local 304, Piso 3 • Edificio Salman
+                {clinicSettings.address || "Maipú 461, Local 304, Piso 3 • Edificio Salman"}
               </p>
             </div>
           </div>
@@ -348,6 +419,17 @@ export default function App() {
               <DollarSign className="w-4 h-4" />
               <span>Caja & Cobros</span>
             </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveTab('SETTINGS')}
+              className={`px-3.5 py-2 rounded-xl flex items-center gap-2 transition-all ${
+                activeTab === 'SETTINGS' ? 'bg-white text-teal-700 shadow-sm font-bold' : 'text-slate-500 hover:text-slate-900'
+              }`}
+            >
+              <Settings className="w-4 h-4 text-teal-600" />
+              <span>Configuración</span>
+            </button>
           </nav>
 
           {/* Right Controls: Branch, Role & Architecture Guide */}
@@ -382,28 +464,6 @@ export default function App() {
                 <option value="PATIENT">Rol: Paciente</option>
               </select>
             </div>
-
-            {/* Technical Architecture & SQL Schema Guide Button */}
-            <button
-              type="button"
-              onClick={() => setShowArchGuide(true)}
-              className="py-1.5 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 rounded-full text-xs font-semibold flex items-center gap-1.5 transition-all shadow-2xs"
-              title="Ver Esquemas SQL PostgreSQL, Arquitectura HIPAA y API REST"
-            >
-              <Code className="w-3.5 h-3.5 text-blue-600" />
-              <span className="hidden sm:inline">Esquema SQL</span>
-            </button>
-
-            {/* Database Storage Manager Button */}
-            <button
-              type="button"
-              onClick={() => setShowDatabaseModal(true)}
-              className="py-1.5 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 rounded-full text-xs font-semibold flex items-center gap-1.5 transition-all shadow-2xs"
-              title="Administrar Base de Datos: Exportar JSON, Importar y Estado de Almacenamiento"
-            >
-              <Database className="w-3.5 h-3.5 text-slate-600" />
-              <span className="hidden sm:inline">Base de Datos</span>
-            </button>
 
             {/* Mobile Menu Toggle */}
             <button
@@ -463,6 +523,17 @@ export default function App() {
               >
                 <DollarSign className="w-4 h-4" />
                 <span>Caja</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => { setActiveTab('SETTINGS'); setMobileMenuOpen(false); }}
+                className={`p-2.5 rounded-xl flex items-center justify-center gap-1.5 col-span-2 sm:col-span-4 ${
+                  activeTab === 'SETTINGS' ? 'bg-teal-700 text-white font-bold' : 'bg-teal-50 text-teal-800'
+                }`}
+              >
+                <Settings className="w-4 h-4 text-teal-500" />
+                <span>Configuración & Base de Datos</span>
               </button>
             </div>
 
@@ -563,6 +634,17 @@ export default function App() {
           />
         )}
 
+        {/* VIEW 4: CONFIGURACIÓN GENERAL & BASE DE DATOS */}
+        {activeTab === 'SETTINGS' && (
+          <ConfigurationPanel
+            onSettingsUpdated={(updated) => {
+              setClinicSettings(updated);
+            }}
+            doctors={doctors}
+            branches={branches}
+          />
+        )}
+
       </main>
 
       {/* ================= FOOTER ================= */}
@@ -570,8 +652,8 @@ export default function App() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-3">
           <div className="flex items-center gap-2">
             <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span>
-            <span className="text-slate-800 font-bold">Daaron Consulta Dental</span>
-            <span>• Sucursal {activeBranch.name} ({activeBranch.address})</span>
+            <span className="text-slate-800 font-bold">{clinicSettings.name || "Daaron Consulta Dental"}</span>
+            <span>• Sucursal {activeBranch.name} ({clinicSettings.address || activeBranch.address})</span>
           </div>
 
           <div className="flex items-center gap-4 text-slate-500">

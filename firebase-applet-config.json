@@ -1,11 +1,12 @@
 {
-  "projectId": "crested-buffer-f9brs",
-  "appId": "1:1090379802543:web:23d0ce795b23abbb96715a",
-  "apiKey": "AIzaSyAHsCSBMjyMXjLLcw2ecCSb3Tw254ei7Bs",
-  "authDomain": "crested-buffer-f9brs.firebaseapp.com",
-  "storageBucket": "crested-buffer-f9brs.firebasestorage.app",
-  "messagingSenderId": "1090379802543",
+  "projectId": "automatic-electron-x8chg",
+  "appId": "1:847533041228:web:f913e8a3c0d9e06b2436e9",
+  "apiKey": "AIzaSyDVgBXMXBSoPnnyOkcK07XY0ur3UVcGvGA",
+  "authDomain": "automatic-electron-x8chg.firebaseapp.com",
+  "firestoreDatabaseId": "ai-studio-dentalmanager-82056352-4daa-4cca-b190-e6b687ec5833",
+  "storageBucket": "automatic-electron-x8chg.firebasestorage.app",
+  "messagingSenderId": "847533041228",
   "measurementId": "",
-  "oAuthClientId": "1090379802543-n7mqmrk71tgf5n31ac0nandi3knupgt2.apps.googleusercontent.com",
+  "oAuthClientId": "847533041228-mqkptk37ljt4mrn6lu1b060c5n13893u.apps.googleusercontent.com",
   "recaptchaSiteKey": ""
 }

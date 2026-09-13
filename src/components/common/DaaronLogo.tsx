@@ -1,19 +1,36 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
+import { ClinicalDatabase } from '../../services/db';
 
 interface DaaronLogoProps {
   className?: string;
   size?: 'sm' | 'md' | 'lg' | 'xl';
   showText?: boolean;
+  src?: string;
+  alt?: string;
 }
 
 export const DaaronLogo: React.FC<DaaronLogoProps> = ({ 
   className = "h-10 w-auto",
-  size = 'md' 
+  src,
+  alt = "Consulta Dental"
 }) => {
+  const [logoSrc, setLogoSrc] = useState<string>(src || '/pagnina.png');
+
+  useEffect(() => {
+    if (src) {
+      setLogoSrc(src);
+    } else {
+      const settings = ClinicalDatabase.getClinicSettings();
+      if (settings?.logoUrl) {
+        setLogoSrc(settings.logoUrl);
+      }
+    }
+  }, [src]);
+
   return (
     <img 
-      src="/pagnina.png" 
-      alt="Daaron Consulta Dental" 
+      src={logoSrc} 
+      alt={alt} 
       className={`${className} object-contain transition-transform hover:scale-105`}
       onError={(e) => {
         // Fallback to inline SVG if needed

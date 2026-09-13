@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
-import { TreatmentBudget, Patient, ProfessionalDoctor, Branch } from '../../types/clinical';
-import { X, Printer, Download, MessageSquare, Share2, CheckCircle2, DollarSign, Calendar, User, Phone, MapPin, Building2, Trash2, Loader2, Image as ImageIcon } from 'lucide-react';
-import { downloadBudgetPdf, downloadBudgetPng } from '../../utils/budgetExporter';
+import React, { useState, useEffect } from 'react';
+import { TreatmentBudget, Patient, ProfessionalDoctor, Branch, ClinicSettings } from '../../types/clinical';
+import { X, Printer, Download, MessageSquare, Share2, CheckCircle2, DollarSign, Calendar, User, Phone, MapPin, Building2, Trash2, Loader2, Image as ImageIcon, Pencil, AlertTriangle } from 'lucide-react';
+import { downloadBudgetPdf, downloadBudgetPng, shareBudgetViaWhatsAppPdf } from '../../utils/budgetExporter';
+import { ClinicalDatabase } from '../../services/db';
 
 interface BudgetPrintModalProps {
   budget: TreatmentBudget | null;
@@ -12,6 +13,7 @@ interface BudgetPrintModalProps {
   onClose: () => void;
   onSendWhatsApp?: (budget: TreatmentBudget) => void;
   onDeleteBudget?: (budgetId: string) => void;
+  onEditBudget?: (budget: TreatmentBudget) => void;
 }
 
 export const BudgetPrintModal: React.FC<BudgetPrintModalProps> = ({
@@ -22,9 +24,18 @@ export const BudgetPrintModal: React.FC<BudgetPrintModalProps> = ({
   isOpen,
   onClose,
   onSendWhatsApp,
-  onDeleteBudget
+  onDeleteBudget,
+  onEditBudget
 }) => {
   const [isDownloading, setIsDownloading] = useState(false);
+  const [clinicSettings, setClinicSettings] = useState<ClinicSettings>(() => ClinicalDatabase.getClinicSettings());
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+
+  useEffect(() => {
+    if (isOpen) {
+      setClinicSettings(ClinicalDatabase.getClinicSettings());
+    }
+  }, [isOpen]);
 
   if (!isOpen || !budget) return null;
 
@@ -35,7 +46,7 @@ export const BudgetPrintModal: React.FC<BudgetPrintModalProps> = ({
   const handleDownloadPdf = async () => {
     try {
       setIsDownloading(true);
-      await downloadBudgetPdf(budget, patient, doctor);
+      await downloadBudgetPdf(budget, patient, doctor, clinicSettings);
     } catch (err) {
       console.error('Error downloading budget PDF:', err);
       // Fallback to print dialog
@@ -48,7 +59,7 @@ export const BudgetPrintModal: React.FC<BudgetPrintModalProps> = ({
   const handleDownloadPng = async () => {
     try {
       setIsDownloading(true);
-      await downloadBudgetPng(budget, patient, doctor);
+      await downloadBudgetPng(budget, patient, doctor, clinicSettings);
     } catch (err) {
       console.error('Error downloading budget PNG:', err);
     } finally {
@@ -63,36 +74,26 @@ export const BudgetPrintModal: React.FC<BudgetPrintModalProps> = ({
     }
   };
 
-  const handleShareWhatsApp = () => {
+  const [isSharingWa, setIsSharingWa] = useState(false);
+  const [waToast, setWaToast] = useState<string | null>(null);
+
+  const handleShareWhatsApp = async () => {
     if (onSendWhatsApp) {
       onSendWhatsApp(budget);
-    } else {
-      // Build WhatsApp message
-      const phone = patient?.phone || patient?.whatsapp || '';
-      const cleanPhone = phone.replace(/[^0-9]/g, '');
-      
-      const itemsList = budget.items
-        .map(i => `• ${i.toothNumber ? `[Pieza ${i.toothNumber}] ` : ''}${i.description} (${i.quantity}x) - $${i.patientCopay.toLocaleString('es-CL')}`)
-        .join('\n');
+      return;
+    }
 
-      const message = `🦷 *PRESUPUESTO ODONTOLÓGICO - DAARON CONSULTA DENTAL*\n\n` +
-        `Estimado(a) *${budget.patientName}*,\n` +
-        `Adjuntamos el detalle de su plan de tratamiento y presupuesto:\n\n` +
-        `📋 *N° Presupuesto:* ${budget.budgetNumber}\n` +
-        `👨‍⚕️ *Profesional:* ${budget.doctorName}\n` +
-        `📅 *Fecha:* ${budget.createdAt}\n\n` +
-        `📝 *Tratamientos Presupuestados:*\n${itemsList}\n\n` +
-        `💵 *Subtotal:* $${budget.subtotal.toLocaleString('es-CL')}\n` +
-        (budget.discountTotal > 0 ? `🏷️ *Descuento:* -$${budget.discountTotal.toLocaleString('es-CL')}\n` : '') +
-        `💰 *TOTAL A PAGAR:* $${budget.totalPatient.toLocaleString('es-CL')}\n\n` +
-        (budget.notes ? `📌 *Condiciones:* ${budget.notes}\n\n` : '') +
-        `Quedamos atentos para coordinar sus citas. ¡Muchas gracias por su confianza!`;
-
-      const url = cleanPhone 
-        ? `https://api.whatsapp.com/send?phone=${cleanPhone}&text=${encodeURIComponent(message)}`
-        : `https://api.whatsapp.com/send?text=${encodeURIComponent(message)}`;
-      
-      window.open(url, '_blank');
+    try {
+      setIsSharingWa(true);
+      const res = await shareBudgetViaWhatsAppPdf(budget, patient, doctor, clinicSettings);
+      if (res.message) {
+        setWaToast(res.message);
+        setTimeout(() => setWaToast(null), 6500);
+      }
+    } catch (err) {
+      console.error('Error sharing budget PDF:', err);
+    } finally {
+      setIsSharingWa(false);
     }
   };
 
@@ -111,7 +112,7 @@ export const BudgetPrintModal: React.FC<BudgetPrintModalProps> = ({
                 Presupuesto Odontológico Oficial {budget.budgetNumber}
               </h3>
               <p className="text-xs text-slate-400">
-                Daaron Consulta Dental — Linares. Emisión, descarga en PDF e impresión oficial.
+                {clinicSettings.name} — {clinicSettings.city}. Emisión, descarga en PDF e impresión oficial.
               </p>
             </div>
           </div>
@@ -121,10 +122,12 @@ export const BudgetPrintModal: React.FC<BudgetPrintModalProps> = ({
             <button
               type="button"
               onClick={handleShareWhatsApp}
-              className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-md shadow-emerald-600/20 transition-all cursor-pointer"
+              disabled={isSharingWa}
+              className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-md shadow-emerald-600/20 transition-all cursor-pointer"
+              title="Enviar documento PDF del presupuesto por WhatsApp"
             >
-              <MessageSquare className="w-4 h-4" />
-              <span className="hidden sm:inline">WhatsApp</span>
+              {isSharingWa ? <Loader2 className="w-4 h-4 animate-spin" /> : <MessageSquare className="w-4 h-4" />}
+              <span className="hidden sm:inline">WhatsApp (PDF)</span>
             </button>
 
             {/* Direct Download PDF CTA (Exact match to platform generation) */}
@@ -160,11 +163,27 @@ export const BudgetPrintModal: React.FC<BudgetPrintModalProps> = ({
               <Printer className="w-4 h-4" />
             </button>
 
+            {/* Edit Budget CTA */}
+            {onEditBudget && (
+              <button
+                type="button"
+                onClick={() => {
+                  onClose();
+                  onEditBudget(budget);
+                }}
+                className="px-3 py-2 bg-amber-500/20 hover:bg-amber-500 text-amber-300 hover:text-white border border-amber-500/30 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer"
+                title="Editar Presupuesto"
+              >
+                <Pencil className="w-4 h-4" />
+                <span className="hidden sm:inline">Editar</span>
+              </button>
+            )}
+
             {/* Delete Budget CTA */}
             {onDeleteBudget && (
               <button
                 type="button"
-                onClick={handleDelete}
+                onClick={() => setShowDeleteConfirm(true)}
                 className="px-3 py-2 bg-rose-600/20 hover:bg-rose-600 text-rose-300 hover:text-white border border-rose-500/30 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer"
                 title="Eliminar Presupuesto"
               >
@@ -184,6 +203,23 @@ export const BudgetPrintModal: React.FC<BudgetPrintModalProps> = ({
           </div>
         </div>
 
+        {/* WhatsApp Image Notification Toast */}
+        {waToast && (
+          <div className="bg-emerald-900 text-emerald-50 px-4 py-3 border-b border-emerald-700 flex items-center justify-between gap-3 text-xs sm:text-sm animate-in slide-in-from-top-2 print:hidden">
+            <div className="flex items-center gap-2.5">
+              <span className="p-1 bg-emerald-500/20 text-emerald-300 rounded-lg font-bold text-base">📸</span>
+              <span className="font-medium">{waToast}</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setWaToast(null)}
+              className="p-1 hover:bg-emerald-800 text-emerald-300 rounded-lg cursor-pointer"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        )}
+
         {/* Printable Document Body */}
         <div className="p-6 sm:p-10 overflow-y-auto flex-1 bg-white text-slate-800 text-xs font-sans print:p-0 print:m-0">
           
@@ -191,23 +227,23 @@ export const BudgetPrintModal: React.FC<BudgetPrintModalProps> = ({
           <div className="flex items-start justify-between border-b-2 border-teal-700 pb-5 mb-6">
             <div className="flex items-start gap-4">
               <img 
-                src="/pagnina.png" 
-                alt="Daaron Consulta Dental" 
+                src={clinicSettings.logoUrl || "/pagnina.png"} 
+                alt={clinicSettings.name || "Consulta Dental"} 
                 className="h-16 w-auto object-contain"
                 onError={(e) => {
                   (e.target as HTMLElement).style.display = 'none';
                 }}
               />
               <div>
-                <h1 className="text-xl sm:text-2xl font-black text-teal-900 tracking-tight">
-                  DAARON CONSULTA DENTAL
+                <h1 className="text-xl sm:text-2xl font-black text-teal-900 tracking-tight uppercase">
+                  {clinicSettings.name || "DAARON CONSULTA DENTAL"}
                 </h1>
                 <p className="text-[11px] text-slate-500 font-semibold tracking-wider uppercase">
                   Centro Odontológico & Especialidades Clínicas
                 </p>
                 <div className="text-[11px] text-slate-600 mt-1.5 space-y-0.5">
-                  <p>Maipú 461, Edificio Salman, Local 304, Piso 3, Linares</p>
-                  <p>Tel: +56 9 8408 5590 | Horario: Lun a Vie 09:00 - 19:00</p>
+                  <p>{clinicSettings.address}, {clinicSettings.city}</p>
+                  <p>Tel: {clinicSettings.phone || "+56 9 8408 5590"} | Horario: {clinicSettings.hours}</p>
                 </div>
               </div>
             </div>
@@ -239,8 +275,8 @@ export const BudgetPrintModal: React.FC<BudgetPrintModalProps> = ({
               </h4>
               <div className="space-y-1 text-slate-700 text-xs">
                 <p><strong>Nombre:</strong> {budget.patientName}</p>
-                <p><strong>RUT / DNI:</strong> {patient?.documentId || 'No registrado'}</p>
-                <p><strong>Teléfono / WhatsApp:</strong> {patient?.phone || patient?.whatsapp || 'No registrado'}</p>
+                <p><strong>RUT / DNI:</strong> {budget.patientRut || patient?.documentId || 'No registrado'}</p>
+                <p><strong>Teléfono / WhatsApp:</strong> {budget.patientPhone || patient?.phone || patient?.whatsapp || 'No registrado'}</p>
                 <p><strong>Previsión / Seguro:</strong> {patient?.insuranceProvider || 'Particular'}</p>
               </div>
             </div>
@@ -354,6 +390,61 @@ export const BudgetPrintModal: React.FC<BudgetPrintModalProps> = ({
         </div>
 
       </div>
+
+      {/* Delete Confirmation Modal */}
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs animate-in fade-in">
+          <div className="bg-slate-900 border border-slate-800 w-full max-w-md rounded-3xl shadow-2xl p-6 flex flex-col gap-4 text-slate-100">
+            <div className="flex items-start gap-3.5">
+              <div className="w-11 h-11 rounded-2xl bg-rose-500/20 border border-rose-500/30 flex items-center justify-center text-rose-400 shrink-0 shadow-xs">
+                <Trash2 className="w-5 h-5" />
+              </div>
+              <div className="flex-1">
+                <h3 className="font-bold text-base text-white">
+                  ¿Eliminar presupuesto?
+                </h3>
+                <p className="text-xs text-slate-400 mt-1">
+                  ¿Estás seguro de que deseas eliminar el presupuesto <strong className="text-white font-mono">{budget.budgetNumber}</strong>?
+                </p>
+                <div className="flex items-center gap-2 mt-2">
+                  <span className="text-xs font-mono font-bold px-2.5 py-1 rounded-lg bg-slate-800 text-slate-200 border border-slate-700">
+                    ${budget.totalPatient.toLocaleString('es-CL')}
+                  </span>
+                  <span className="text-[11px] text-slate-400">
+                    ({budget.items.length} tratamientos)
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-rose-950/40 border border-rose-900/50 p-3.5 rounded-2xl text-xs text-rose-300 leading-relaxed">
+              ⚠️ <strong>Advertencia:</strong> Esta acción no se puede deshacer. Se removerá del historial contable y clínico.
+            </div>
+
+            <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-slate-800">
+              <button
+                type="button"
+                onClick={() => setShowDeleteConfirm(false)}
+                className="px-4 py-2 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition-all cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  onDeleteBudget?.(budget.id);
+                  setShowDeleteConfirm(false);
+                  onClose();
+                }}
+                className="px-4 py-2 rounded-full bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold flex items-center gap-1.5 shadow-sm transition-all active:scale-95 cursor-pointer"
+              >
+                <Trash2 className="w-4 h-4" />
+                <span>Sí, Eliminar</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

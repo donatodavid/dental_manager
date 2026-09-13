@@ -43,12 +43,14 @@ import {
   FolderPlus,
   Trash2,
   Download,
-  Loader2
+  Loader2,
+  Pencil
 } from 'lucide-react';
 import { BudgetPrintModal } from '../billing/BudgetPrintModal';
 import { PatientPrescriptionGenerator } from './PatientPrescriptionGenerator';
 import { BudgetBuilderModal } from '../billing/BudgetBuilderModal';
-import { downloadBudgetPdf } from '../../utils/budgetExporter';
+import { downloadBudgetPdf, shareBudgetViaWhatsAppPdf } from '../../utils/budgetExporter';
+import { ClinicalDatabase } from '../../services/db';
 
 interface PatientDetailModalProps {
   patient: Patient;
@@ -64,6 +66,7 @@ interface PatientDetailModalProps {
   tariffs?: TreatmentTariffItem[];
   patients?: Patient[];
   onSaveBudget?: (budget: TreatmentBudget) => void;
+  onDeleteBudget?: (budgetId: string) => void;
   onCreateBudgetForPatient?: (patient: Patient, initialItem?: { name: string; price: number }) => void;
 }
 
@@ -81,10 +84,13 @@ export const PatientDetailModal: React.FC<PatientDetailModalProps> = ({
   tariffs = [],
   patients = [],
   onSaveBudget,
+  onDeleteBudget,
   onCreateBudgetForPatient
 }) => {
   const [activeTab, setActiveTab] = useState<'BUDGETS' | 'PRESCRIPTION' | 'DOCUMENTS'>('BUDGETS');
   const [showPatientBudgetModal, setShowPatientBudgetModal] = useState(false);
+  const [budgetToEdit, setBudgetToEdit] = useState<TreatmentBudget | null>(null);
+  const [budgetToDelete, setBudgetToDelete] = useState<TreatmentBudget | null>(null);
   const [selectedBudgetForPrint, setSelectedBudgetForPrint] = useState<TreatmentBudget | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
@@ -103,6 +109,27 @@ export const PatientDetailModal: React.FC<PatientDetailModalProps> = ({
   const [xrayBrightness, setXrayBrightness] = useState(100);
   const [xrayContrast, setXrayContrast] = useState(100);
   const [xrayInvert, setXrayInvert] = useState(false);
+
+  // WhatsApp PDF sharing state
+  const [sharingWaBudgetId, setSharingWaBudgetId] = useState<string | null>(null);
+  const [waToast, setWaToast] = useState<string | null>(null);
+
+  const handleShareBudgetPdfWhatsApp = async (budget: TreatmentBudget) => {
+    try {
+      setSharingWaBudgetId(budget.id);
+      const doctorObj = doctors.find(d => d.id === budget.doctorId);
+      const settings = ClinicalDatabase.getClinicSettings();
+      const res = await shareBudgetViaWhatsAppPdf(budget, patient, doctorObj, settings);
+      if (res.message) {
+        setWaToast(res.message);
+        setTimeout(() => setWaToast(null), 6500);
+      }
+    } catch (err) {
+      console.error('Error sharing budget PDF:', err);
+    } finally {
+      setSharingWaBudgetId(null);
+    }
+  };
 
   // New Document Upload State
   const [showUploadModal, setShowUploadModal] = useState(false);
@@ -131,20 +158,6 @@ export const PatientDetailModal: React.FC<PatientDetailModalProps> = ({
   if (isOpen === false) return null;
 
   const currentDoctor = doctors.find(d => d.id === currentDoctorId) || doctors[0];
-
-  // Calculate age from birthDate
-  const calculateAge = (birthDateString: string): number => {
-    const today = new Date();
-    const birth = new Date(birthDateString);
-    let age = today.getFullYear() - birth.getFullYear();
-    const monthDiff = today.getMonth() - birth.getMonth();
-    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birth.getDate())) {
-      age--;
-    }
-    return age;
-  };
-
-  const age = calculateAge(patient.birthDate);
 
   // Add new clinical evolution (SOAP)
   const handleSaveEvolution = (e: React.FormEvent) => {
@@ -267,7 +280,7 @@ export const PatientDetailModal: React.FC<PatientDetailModalProps> = ({
                 </span>
               </div>
               <p className="text-xs text-slate-500 mt-0.5">
-                {age} años • {patient.gender === 'F' ? 'Femenino' : patient.gender === 'M' ? 'Masculino' : 'Otro'} • Previsión: <strong className="text-slate-800">{patient.insuranceProvider}</strong> • <span className="text-teal-700 font-semibold">Daaron Consulta Dental (Linares)</span>
+                Previsión: <strong className="text-slate-800">{patient.insuranceProvider}</strong> • Teléfono: <strong className="text-slate-800">{patient.phone}</strong> • <span className="text-teal-700 font-semibold">Daaron Consulta Dental (Linares)</span>
               </p>
             </div>
           </div>
@@ -453,6 +466,20 @@ export const PatientDetailModal: React.FC<PatientDetailModalProps> = ({
             <PatientPrescriptionGenerator
               patient={patient}
               doctors={doctors}
+              onSaveToHistory={(record) => {
+                const newDoc = {
+                  id: `doc-${Date.now()}`,
+                  name: `Receta Médica - ${record.doctorName} (${record.date})`,
+                  type: 'OTHER' as const,
+                  url: '#',
+                  uploadedAt: record.date,
+                  size: 'PDF Oficial'
+                };
+                onUpdatePatient({
+                  ...patient,
+                  documents: [newDoc, ...(patient.documents || [])]
+                });
+              }}
             />
           )}
 
@@ -475,8 +502,11 @@ export const PatientDetailModal: React.FC<PatientDetailModalProps> = ({
                 {activeRole !== 'PATIENT' && (
                   <button
                     type="button"
-                    onClick={() => setShowPatientBudgetModal(true)}
-                    className="py-2 px-4 bg-slate-900 hover:bg-slate-800 text-white rounded-full text-xs font-bold flex items-center gap-2 shadow-sm transition-all"
+                    onClick={() => {
+                      setBudgetToEdit(null);
+                      setShowPatientBudgetModal(true);
+                    }}
+                    className="py-2 px-4 bg-slate-900 hover:bg-slate-800 text-white rounded-full text-xs font-bold flex items-center gap-2 shadow-sm transition-all cursor-pointer"
                   >
                     <Plus className="w-4 h-4" />
                     + Crear Nuevo Presupuesto
@@ -549,38 +579,20 @@ export const PatientDetailModal: React.FC<PatientDetailModalProps> = ({
                       </div>
 
                       <div className="flex items-center gap-2">
-                        {/* WhatsApp CTA */}
+                        {/* WhatsApp CTA (PDF Document) */}
                         <button
                           type="button"
-                          onClick={() => {
-                            const phone = patient.whatsapp || patient.phone || '';
-                            const cleanPhone = phone.replace(/[^0-9]/g, '');
-                            const itemsList = budget.items
-                              .map(i => `• ${i.toothNumber ? `[Pieza ${i.toothNumber}] ` : ''}${i.description} (${i.quantity}x) - $${i.patientCopay.toLocaleString('es-CL')}`)
-                              .join('\n');
-                            const message = `🦷 *PRESUPUESTO ODONTOLÓGICO - DAARON CONSULTA DENTAL*\n\n` +
-                              `Estimado(a) *${patient.firstName} ${patient.lastName}*,\n` +
-                              `Le compartimos el presupuesto para su plan de tratamiento en Daaron Consulta Dental (Linares):\n\n` +
-                              `📋 *N° Presupuesto:* ${budget.budgetNumber}\n` +
-                              `👨‍⚕️ *Doctor(a):* ${budget.doctorName}\n` +
-                              `📅 *Fecha:* ${budget.createdAt}\n\n` +
-                              `📝 *Detalle Tratamientos:*\n${itemsList}\n\n` +
-                              `💵 *Subtotal:* $${budget.subtotal.toLocaleString('es-CL')}\n` +
-                              (budget.discountTotal > 0 ? `🏷️ *Descuento:* -$${budget.discountTotal.toLocaleString('es-CL')}\n` : '') +
-                              `💰 *TOTAL A PAGAR:* $${budget.totalPatient.toLocaleString('es-CL')}\n\n` +
-                              `Dirección: Maipú 461, Local 304, Piso 3, Edificio Salman, Linares.\n` +
-                              `Quedamos atentos a cualquier duda para agendar su próxima atención.`;
-
-                            const url = cleanPhone
-                              ? `https://api.whatsapp.com/send?phone=${cleanPhone}&text=${encodeURIComponent(message)}`
-                              : `https://api.whatsapp.com/send?text=${encodeURIComponent(message)}`;
-                            window.open(url, '_blank');
-                          }}
-                          className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-full text-xs font-semibold flex items-center gap-1.5 shadow-2xs transition-all"
-                          title="Enviar por WhatsApp"
+                          onClick={() => handleShareBudgetPdfWhatsApp(budget)}
+                          disabled={sharingWaBudgetId === budget.id}
+                          className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white rounded-full text-xs font-semibold flex items-center gap-1.5 shadow-2xs transition-all cursor-pointer"
+                          title="Enviar documento PDF del presupuesto por WhatsApp"
                         >
-                          <MessageSquare className="w-3.5 h-3.5" />
-                          <span>WhatsApp</span>
+                          {sharingWaBudgetId === budget.id ? (
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          ) : (
+                            <MessageSquare className="w-3.5 h-3.5" />
+                          )}
+                          <span>WhatsApp (PDF)</span>
                         </button>
 
                         {/* Direct Download PDF */}
@@ -607,12 +619,57 @@ export const PatientDetailModal: React.FC<PatientDetailModalProps> = ({
                           <Printer className="w-3.5 h-3.5 text-blue-600" />
                           <span>Ver / Imprimir</span>
                         </button>
+
+                        {/* Edit Budget CTA */}
+                        {activeRole !== 'PATIENT' && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setBudgetToEdit(budget);
+                              setShowPatientBudgetModal(true);
+                            }}
+                            className="px-3 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 rounded-full text-xs font-semibold flex items-center gap-1.5 transition-all shadow-2xs cursor-pointer"
+                            title="Editar Presupuesto"
+                          >
+                            <Pencil className="w-3.5 h-3.5 text-amber-700" />
+                            <span>Editar</span>
+                          </button>
+                        )}
+
+                        {/* Delete Budget CTA */}
+                        {activeRole !== 'PATIENT' && onDeleteBudget && (
+                          <button
+                            type="button"
+                            onClick={() => setBudgetToDelete(budget)}
+                            className="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-full text-xs font-semibold flex items-center gap-1.5 transition-all shadow-2xs cursor-pointer"
+                            title="Eliminar Presupuesto"
+                          >
+                            <Trash2 className="w-3.5 h-3.5 text-rose-600" />
+                            <span>Eliminar</span>
+                          </button>
+                        )}
                       </div>
                     </div>
 
                   </div>
                 ))}
               </div>
+
+              {waToast && (
+                <div className="p-3.5 bg-emerald-900 text-emerald-100 rounded-2xl text-xs flex items-center justify-between gap-3 shadow-lg border border-emerald-700 animate-in fade-in">
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                    <span className="font-medium">{waToast}</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setWaToast(null)}
+                    className="text-emerald-300 hover:text-white font-bold p-1 rounded cursor-pointer"
+                  >
+                    ×
+                  </button>
+                </div>
+              )}
 
               {budgets.filter(b => b.patientId === patient.id).length === 0 && (
                 <div className="p-8 text-center bg-white rounded-3xl border border-dashed border-slate-200 text-slate-500 text-xs flex flex-col items-center gap-2">
@@ -1068,20 +1125,25 @@ export const PatientDetailModal: React.FC<PatientDetailModalProps> = ({
         </div>
       )}
 
-      {/* MODAL: Creador de Presupuesto para este Paciente */}
+      {/* MODAL: Creador / Editor de Presupuesto para este Paciente */}
       {showPatientBudgetModal && (
         <BudgetBuilderModal
           isOpen={showPatientBudgetModal}
-          onClose={() => setShowPatientBudgetModal(false)}
+          onClose={() => {
+            setShowPatientBudgetModal(false);
+            setBudgetToEdit(null);
+          }}
           onSaveBudget={(budget) => {
             if (onSaveBudget) onSaveBudget(budget);
             setShowPatientBudgetModal(false);
+            setBudgetToEdit(null);
           }}
           patients={[patient]}
           defaultPatient={patient}
           doctors={doctors}
           branches={branches}
           tariffs={tariffs}
+          budgetToEdit={budgetToEdit}
         />
       )}
 
@@ -1094,7 +1156,69 @@ export const PatientDetailModal: React.FC<PatientDetailModalProps> = ({
           patient={patient}
           doctor={doctors.find(d => d.id === selectedBudgetForPrint.doctorId)}
           branch={branches.find(b => b.id === selectedBudgetForPrint.branchId)}
+          onDeleteBudget={onDeleteBudget}
+          onEditBudget={(b) => {
+            setSelectedBudgetForPrint(null);
+            setBudgetToEdit(b);
+            setShowPatientBudgetModal(true);
+          }}
         />
+      )}
+
+      {/* MODAL: Confirmación de Eliminación de Presupuesto */}
+      {budgetToDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs animate-in fade-in">
+          <div className="bg-white border border-slate-200 w-full max-w-md rounded-3xl shadow-2xl p-6 flex flex-col gap-4">
+            <div className="flex items-start gap-3.5">
+              <div className="w-11 h-11 rounded-2xl bg-rose-50 border border-rose-200 flex items-center justify-center text-rose-600 shrink-0 shadow-xs">
+                <Trash2 className="w-5 h-5" />
+              </div>
+              <div className="flex-1">
+                <h3 className="font-bold text-base text-slate-900">
+                  ¿Eliminar presupuesto?
+                </h3>
+                <p className="text-xs text-slate-600 mt-1">
+                  ¿Estás seguro de que deseas eliminar el presupuesto <strong className="text-slate-900 font-mono">{budgetToDelete.budgetNumber}</strong>?
+                </p>
+                <div className="flex items-center gap-2 mt-2">
+                  <span className="text-xs font-mono font-bold px-2.5 py-1 rounded-lg bg-slate-100 text-slate-800 border border-slate-200">
+                    Total: ${(budgetToDelete.totalPatient || 0).toLocaleString('es-CL')}
+                  </span>
+                  <span className="text-[11px] text-slate-500">
+                    ({budgetToDelete.items.length} tratamientos)
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-rose-50 border border-rose-200/80 p-3.5 rounded-2xl text-xs text-rose-700 leading-relaxed">
+              ⚠️ <strong>Advertencia:</strong> Esta acción no se puede deshacer y removerá este presupuesto del historial del paciente.
+            </div>
+
+            <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setBudgetToDelete(null)}
+                className="px-4 py-2 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold transition-all cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (onDeleteBudget) {
+                    onDeleteBudget(budgetToDelete.id);
+                  }
+                  setBudgetToDelete(null);
+                }}
+                className="px-4 py-2 rounded-full bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold flex items-center gap-1.5 shadow-sm transition-all active:scale-95 cursor-pointer"
+              >
+                <Trash2 className="w-4 h-4" />
+                <span>Sí, Eliminar Presupuesto</span>
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* MODAL: Confirmación de Eliminación de Paciente desde Ficha Clínica */}

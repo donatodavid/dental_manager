@@ -18,6 +18,8 @@ import {
   getAllPayments,
   upsertPayment,
   upsertMultiplePayments,
+  resetAllPayments,
+  isPaymentsReset,
   getLatestCashSession,
   upsertCashSession
 } from './src/db/repository.ts';
@@ -199,10 +201,20 @@ async function startServer() {
   app.get('/api/payments', optionalAuth, async (req: AuthRequest, res) => {
     try {
       const list = await getAllPayments();
-      res.json({ success: true, data: list });
+      res.json({ success: true, data: list, isReset: isPaymentsReset() });
     } catch (error: any) {
       console.error('Error fetching payments:', error);
       res.status(500).json({ error: error.message || 'Failed to fetch payments' });
+    }
+  });
+
+  app.post('/api/payments/reset', optionalAuth, async (req: AuthRequest, res) => {
+    try {
+      await resetAllPayments();
+      res.json({ success: true, message: 'Earnings and payments reset to 0' });
+    } catch (error: any) {
+      console.error('Error resetting payments:', error);
+      res.status(500).json({ error: error.message || 'Failed to reset payments' });
     }
   });
 

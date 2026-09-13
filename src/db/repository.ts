@@ -21,6 +21,21 @@ import {
   ProfessionalDoctor,
   TreatmentTariffItem
 } from '../types/clinical.ts';
+import {
+  INITIAL_PATIENTS,
+  INITIAL_BUDGETS,
+  INITIAL_APPOINTMENTS,
+  INITIAL_PAYMENTS,
+  INITIAL_CASH_SESSION
+} from '../data/initialData.ts';
+
+// In-memory store fallback when PostgreSQL is offline or unconfigured
+let memoryPatients: Patient[] = [...INITIAL_PATIENTS];
+let memoryBudgets: TreatmentBudget[] = [...INITIAL_BUDGETS];
+let memoryAppointments: Appointment[] = [...INITIAL_APPOINTMENTS];
+let memoryPayments: PaymentTransaction[] = [...INITIAL_PAYMENTS];
+let memoryCashSession: CashRegisterSession = { ...INITIAL_CASH_SESSION };
+const memoryUsers = new Map<string, any>();
 
 // User Helpers
 export async function getOrCreateUser(uid: string, email: string, name?: string) {
@@ -42,8 +57,10 @@ export async function getOrCreateUser(uid: string, email: string, name?: string)
       .returning();
     return result[0];
   } catch (error) {
-    console.error('Database getOrCreateUser failed:', error);
-    throw new Error('Database operation failed: unable to register user', { cause: error });
+    console.warn('Database not connected, using in-memory user store:', error);
+    const existing = memoryUsers.get(uid) || { uid, email, name: name || '', role: 'DOCTOR' };
+    memoryUsers.set(uid, { ...existing, email, name: name || existing.name });
+    return memoryUsers.get(uid);
   }
 }
 
@@ -51,6 +68,9 @@ export async function getOrCreateUser(uid: string, email: string, name?: string)
 export async function getAllPatients(): Promise<Patient[]> {
   try {
     const rows = await db.select().from(patients);
+    if (!rows || rows.length === 0) {
+      return memoryPatients;
+    }
     return rows.map(r => ({
       id: r.id,
       documentId: r.documentId,
@@ -96,12 +116,20 @@ export async function getAllPatients(): Promise<Patient[]> {
       tags: (r.tags as any) || []
     }));
   } catch (error) {
-    console.error('Database getAllPatients failed:', error);
-    throw new Error('Database operation failed: unable to fetch patients', { cause: error });
+    console.warn('Database not connected, using in-memory patients store');
+    return memoryPatients;
   }
 }
 
 export async function upsertPatient(p: Patient) {
+  // Update in-memory store
+  const existingIdx = memoryPatients.findIndex(item => item.id === p.id);
+  if (existingIdx >= 0) {
+    memoryPatients[existingIdx] = p;
+  } else {
+    memoryPatients.unshift(p);
+  }
+
   try {
     const result = await db.insert(patients)
       .values({
@@ -156,32 +184,28 @@ export async function upsertPatient(p: Patient) {
         }
       })
       .returning();
-    return result[0];
+    return result[0] || p;
   } catch (error) {
-    console.error('Database upsertPatient failed:', error);
-    throw new Error('Database operation failed: unable to save patient', { cause: error });
+    console.warn('Database not connected, saved patient in-memory');
+    return p;
   }
 }
 
 export async function upsertMultiplePatients(patientList: Patient[]) {
-  try {
-    for (const p of patientList) {
-      await upsertPatient(p);
-    }
-    return true;
-  } catch (error) {
-    console.error('Database upsertMultiplePatients failed:', error);
-    throw new Error('Database operation failed: unable to batch save patients', { cause: error });
+  for (const p of patientList) {
+    await upsertPatient(p);
   }
+  return true;
 }
 
 export async function deletePatient(patientId: string) {
+  memoryPatients = memoryPatients.filter(p => p.id !== patientId);
   try {
     await db.delete(patients).where(eq(patients.id, patientId));
     return true;
   } catch (error) {
-    console.error('Database deletePatient failed:', error);
-    throw new Error('Database operation failed: unable to delete patient', { cause: error });
+    console.warn('Database not connected, deleted patient in-memory');
+    return true;
   }
 }
 
@@ -189,6 +213,9 @@ export async function deletePatient(patientId: string) {
 export async function getAllBudgets(): Promise<TreatmentBudget[]> {
   try {
     const rows = await db.select().from(treatmentBudgets).orderBy(desc(treatmentBudgets.createdAt));
+    if (!rows || rows.length === 0) {
+      return memoryBudgets;
+    }
     return rows.map(r => ({
       id: r.id,
       budgetNumber: r.budgetNumber,
@@ -210,12 +237,19 @@ export async function getAllBudgets(): Promise<TreatmentBudget[]> {
       notes: r.notes || ''
     }));
   } catch (error) {
-    console.error('Database getAllBudgets failed:', error);
-    throw new Error('Database operation failed: unable to fetch budgets', { cause: error });
+    console.warn('Database not connected, using in-memory budgets store');
+    return memoryBudgets;
   }
 }
 
 export async function upsertBudget(b: TreatmentBudget) {
+  const existingIdx = memoryBudgets.findIndex(item => item.id === b.id);
+  if (existingIdx >= 0) {
+    memoryBudgets[existingIdx] = b;
+  } else {
+    memoryBudgets.unshift(b);
+  }
+
   try {
     const result = await db.insert(treatmentBudgets)
       .values({
@@ -259,32 +293,28 @@ export async function upsertBudget(b: TreatmentBudget) {
         }
       })
       .returning();
-    return result[0];
+    return result[0] || b;
   } catch (error) {
-    console.error('Database upsertBudget failed:', error);
-    throw new Error('Database operation failed: unable to save budget', { cause: error });
+    console.warn('Database not connected, saved budget in-memory');
+    return b;
   }
 }
 
 export async function upsertMultipleBudgets(budgetsList: TreatmentBudget[]) {
-  try {
-    for (const b of budgetsList) {
-      await upsertBudget(b);
-    }
-    return true;
-  } catch (error) {
-    console.error('Database upsertMultipleBudgets failed:', error);
-    throw new Error('Database operation failed: unable to batch save budgets', { cause: error });
+  for (const b of budgetsList) {
+    await upsertBudget(b);
   }
+  return true;
 }
 
 export async function deleteBudget(budgetId: string) {
+  memoryBudgets = memoryBudgets.filter(b => b.id !== budgetId);
   try {
     await db.delete(treatmentBudgets).where(eq(treatmentBudgets.id, budgetId));
     return true;
   } catch (error) {
-    console.error('Database deleteBudget failed:', error);
-    throw new Error('Database operation failed: unable to delete budget', { cause: error });
+    console.warn('Database not connected, deleted budget in-memory');
+    return true;
   }
 }
 
@@ -292,6 +322,9 @@ export async function deleteBudget(budgetId: string) {
 export async function getAllAppointments(): Promise<Appointment[]> {
   try {
     const rows = await db.select().from(appointments);
+    if (!rows || rows.length === 0) {
+      return memoryAppointments;
+    }
     return rows.map(r => ({
       id: r.id,
       patientId: r.patientId,
@@ -314,12 +347,19 @@ export async function getAllAppointments(): Promise<Appointment[]> {
       reminderSent: (r.reminderSent as any) || { whatsapp: false, sms: false, email: false }
     }));
   } catch (error) {
-    console.error('Database getAllAppointments failed:', error);
-    throw new Error('Database operation failed: unable to fetch appointments', { cause: error });
+    console.warn('Database not connected, using in-memory appointments store');
+    return memoryAppointments;
   }
 }
 
 export async function upsertAppointment(a: Appointment) {
+  const existingIdx = memoryAppointments.findIndex(item => item.id === a.id);
+  if (existingIdx >= 0) {
+    memoryAppointments[existingIdx] = a;
+  } else {
+    memoryAppointments.unshift(a);
+  }
+
   try {
     const result = await db.insert(appointments)
       .values({
@@ -366,29 +406,48 @@ export async function upsertAppointment(a: Appointment) {
         }
       })
       .returning();
-    return result[0];
+    return result[0] || a;
   } catch (error) {
-    console.error('Database upsertAppointment failed:', error);
-    throw new Error('Database operation failed: unable to save appointment', { cause: error });
+    console.warn('Database not connected, saved appointment in-memory');
+    return a;
   }
 }
 
 export async function upsertMultipleAppointments(list: Appointment[]) {
+  for (const a of list) {
+    await upsertAppointment(a);
+  }
+  return true;
+}
+
+let paymentsExplicitlyReset = false;
+
+export async function resetAllPayments() {
+  memoryPayments = [];
+  paymentsExplicitlyReset = true;
   try {
-    for (const a of list) {
-      await upsertAppointment(a);
-    }
+    await db.delete(paymentTransactions);
     return true;
   } catch (error) {
-    console.error('Database upsertMultipleAppointments failed:', error);
-    throw new Error('Database operation failed: unable to batch save appointments', { cause: error });
+    console.warn('Database not connected, reset payments in-memory');
+    return true;
   }
+}
+
+export function isPaymentsReset(): boolean {
+  return paymentsExplicitlyReset;
 }
 
 // Payment Transactions Helpers
 export async function getAllPayments(): Promise<PaymentTransaction[]> {
+  if (paymentsExplicitlyReset) {
+    return [];
+  }
   try {
     const rows = await db.select().from(paymentTransactions);
+    if (!rows || rows.length === 0) {
+      return memoryPayments;
+    }
     return rows.map(r => ({
       id: r.id,
       receiptNumber: r.receiptNumber,
@@ -409,12 +468,20 @@ export async function getAllPayments(): Promise<PaymentTransaction[]> {
       receivedBy: r.receivedBy || ''
     }));
   } catch (error) {
-    console.error('Database getAllPayments failed:', error);
-    throw new Error('Database operation failed: unable to fetch payments', { cause: error });
+    console.warn('Database not connected, using in-memory payments store');
+    return memoryPayments;
   }
 }
 
 export async function upsertPayment(p: PaymentTransaction) {
+  paymentsExplicitlyReset = false;
+  const existingIdx = memoryPayments.findIndex(item => item.id === p.id);
+  if (existingIdx >= 0) {
+    memoryPayments[existingIdx] = p;
+  } else {
+    memoryPayments.unshift(p);
+  }
+
   try {
     const result = await db.insert(paymentTransactions)
       .values({
@@ -451,58 +518,56 @@ export async function upsertPayment(p: PaymentTransaction) {
         }
       })
       .returning();
-    return result[0];
+    return result[0] || p;
   } catch (error) {
-    console.error('Database upsertPayment failed:', error);
-    throw new Error('Database operation failed: unable to save payment', { cause: error });
+    console.warn('Database not connected, saved payment in-memory');
+    return p;
   }
 }
 
 export async function upsertMultiplePayments(list: PaymentTransaction[]) {
-  try {
-    for (const p of list) {
-      await upsertPayment(p);
-    }
-    return true;
-  } catch (error) {
-    console.error('Database upsertMultiplePayments failed:', error);
-    throw new Error('Database operation failed: unable to batch save payments', { cause: error });
+  for (const p of list) {
+    await upsertPayment(p);
   }
+  return true;
 }
 
 // Cash Session Helper
 export async function getLatestCashSession(): Promise<CashRegisterSession | null> {
   try {
     const rows = await db.select().from(cashRegisterSessions).limit(1);
-    if (rows.length === 0) return null;
-    const r = rows[0];
-    return {
-      id: r.id,
-      branchId: r.branchId,
-      branchName: r.branchName,
-      openedAt: r.openedAt,
-      closedAt: r.closedAt || undefined,
-      openedBy: r.openedBy,
-      closedBy: r.closedBy || undefined,
-      openingCash: r.openingCash || 0,
-      closingCash: r.closingCash || undefined,
-      totalCashIncome: r.totalCashIncome || 0,
-      totalCardIncome: r.totalCardIncome || 0,
-      totalTransferIncome: r.totalTransferIncome || 0,
-      totalInsuranceIncome: r.totalInsuranceIncome || 0,
-      totalExpenses: r.totalExpenses || 0,
-      expectedCashTotal: r.expectedCashTotal || 0,
-      cashDifference: r.cashDifference || undefined,
-      status: (r.status as any) || 'OPEN',
-      notes: r.notes || undefined
-    };
+    if (rows && rows.length > 0) {
+      const r = rows[0];
+      return {
+        id: r.id,
+        branchId: r.branchId,
+        branchName: r.branchName,
+        openedAt: r.openedAt,
+        closedAt: r.closedAt || undefined,
+        openedBy: r.openedBy,
+        closedBy: r.closedBy || undefined,
+        openingCash: r.openingCash || 0,
+        closingCash: r.closingCash || undefined,
+        totalCashIncome: r.totalCashIncome || 0,
+        totalCardIncome: r.totalCardIncome || 0,
+        totalTransferIncome: r.totalTransferIncome || 0,
+        totalInsuranceIncome: r.totalInsuranceIncome || 0,
+        totalExpenses: r.totalExpenses || 0,
+        expectedCashTotal: r.expectedCashTotal || 0,
+        cashDifference: r.cashDifference || undefined,
+        status: (r.status as any) || 'OPEN',
+        notes: r.notes || undefined
+      };
+    }
+    return memoryCashSession;
   } catch (error) {
-    console.error('Database getLatestCashSession failed:', error);
-    return null;
+    console.warn('Database not connected, using in-memory cash session');
+    return memoryCashSession;
   }
 }
 
 export async function upsertCashSession(s: CashRegisterSession) {
+  memoryCashSession = { ...s };
   try {
     const result = await db.insert(cashRegisterSessions)
       .values({
@@ -543,9 +608,9 @@ export async function upsertCashSession(s: CashRegisterSession) {
         }
       })
       .returning();
-    return result[0];
+    return result[0] || s;
   } catch (error) {
-    console.error('Database upsertCashSession failed:', error);
-    throw new Error('Database operation failed: unable to save cash session', { cause: error });
+    console.warn('Database not connected, saved cash session in-memory');
+    return s;
   }
 }

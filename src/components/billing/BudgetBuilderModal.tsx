@@ -5,8 +5,10 @@ import {
   Patient, 
   ProfessionalDoctor, 
   Branch, 
-  TreatmentTariffItem 
+  TreatmentTariffItem,
+  ClinicSettings
 } from '../../types/clinical';
+import { ClinicalDatabase } from '../../services/db';
 import { 
   X, 
   Plus, 
@@ -16,9 +18,11 @@ import {
   MessageSquare, 
   CheckCircle2, 
   FileText,
-  UserCheck
+  UserCheck,
+  Pencil
 } from 'lucide-react';
 import { jsPDF } from 'jspdf';
+import { shareBudgetViaWhatsAppPdf } from '../../utils/budgetExporter';
 
 export interface BudgetItemInput {
   id: string;
@@ -38,6 +42,7 @@ interface BudgetBuilderModalProps {
   tariffs?: TreatmentTariffItem[];
   defaultPatient?: Patient;
   initialItem?: { toothNumber?: number; name: string; price: number };
+  budgetToEdit?: TreatmentBudget | null;
 }
 
 export const PIEZAS_DENTALES_OPTIONS = [
@@ -126,20 +131,24 @@ export const BudgetBuilderModal: React.FC<BudgetBuilderModalProps> = ({
   doctors,
   branches,
   defaultPatient,
-  initialItem
+  initialItem,
+  budgetToEdit
 }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const logoImageRef = useRef<HTMLImageElement | null>(null);
 
-  // Professional state
-  const [doctorNombre, setDoctorNombre] = useState<string>('');
-  const [doctorEsp, setDoctorEsp] = useState<string>('');
+  // Clinic settings
+  const [clinicSettings, setClinicSettings] = useState<ClinicSettings>(() => ClinicalDatabase.getClinicSettings());
+
+  // Professional state - Dr. Alejandro David is ALWAYS default & first choice
+  const [doctorNombre, setDoctorNombre] = useState<string>('Dr. Alejandro David');
+  const [doctorEsp, setDoctorEsp] = useState<string>('Implantología & Cirugía Oral');
 
   // Patient state
   const [selectedPatientId, setSelectedPatientId] = useState<string>('');
   const [pacNombre, setPacNombre] = useState<string>('');
   const [pacRut, setPacRut] = useState<string>('');
-  const [pacEdad, setPacEdad] = useState<string>('');
+  const [pacTelefono, setPacTelefono] = useState<string>('');
 
   const [fecha, setFecha] = useState<string>(() => new Date().toISOString().split('T')[0]);
   const [observaciones, setObservaciones] = useState<string>('');
@@ -155,10 +164,13 @@ export const BudgetBuilderModal: React.FC<BudgetBuilderModalProps> = ({
     }
   ]);
 
-  // Load logo
+  // Load clinic settings and logo
   useEffect(() => {
+    const settings = ClinicalDatabase.getClinicSettings();
+    setClinicSettings(settings);
     const img = new Image();
-    img.src = '/pagnina.png';
+    img.crossOrigin = 'anonymous';
+    img.src = settings.logoUrl || '/pagnina.png';
     img.onload = () => {
       logoImageRef.current = img;
       renderCanvas();
@@ -168,7 +180,7 @@ export const BudgetBuilderModal: React.FC<BudgetBuilderModalProps> = ({
       logoImageRef.current = null;
       renderCanvas();
     };
-  }, []);
+  }, [isOpen]);
 
   // Update fields when selecting another registered patient
   const handleSelectPatientDropdown = (patientId: string) => {
@@ -176,45 +188,105 @@ export const BudgetBuilderModal: React.FC<BudgetBuilderModalProps> = ({
     if (!patientId) {
       setPacNombre('');
       setPacRut('');
-      setPacEdad('');
+      setPacTelefono('');
       return;
     }
     const p = patients.find(pat => pat.id === patientId);
     if (p) {
       setPacNombre(`${p.firstName} ${p.lastName}`);
       setPacRut(formatRut(p.documentId));
-      if (p.birthDate) {
-        const birth = new Date(p.birthDate);
-        const age = new Date().getFullYear() - birth.getFullYear();
-        setPacEdad(isNaN(age) ? '' : `${age} años`);
-      } else {
-        setPacEdad('');
-      }
+      setPacTelefono(p.phone || p.whatsapp || '');
     }
   };
 
-  // Reset to blank without any preselected data whenever modal opens
+  // Reset/Initialize whenever modal opens or when budgetToEdit / defaultPatient changes
   useEffect(() => {
     if (isOpen) {
-      setDoctorNombre('');
-      setDoctorEsp('');
-      setSelectedPatientId('');
-      setPacNombre('');
-      setPacRut('');
-      setPacEdad('');
-      setFecha(new Date().toISOString().split('T')[0]);
-      setObservaciones('');
-      setItems([
-        {
-          id: `item-${Date.now()}`,
-          pieza: '',
-          nombre: '',
-          cant: 1,
-          precio: 0
+      const settings = ClinicalDatabase.getClinicSettings();
+      setClinicSettings(settings);
+
+      if (budgetToEdit) {
+        setDoctorNombre(budgetToEdit.doctorName || 'Dr. Alejandro David');
+        const foundDoc = doctors.find(d => d.id === budgetToEdit.doctorId || d.name === budgetToEdit.doctorName);
+        setDoctorEsp(foundDoc?.specialty || 'Implantología & Cirugía Oral');
+        setSelectedPatientId(budgetToEdit.patientId || '');
+        setPacNombre(budgetToEdit.patientName || '');
+        setPacRut(formatRut(budgetToEdit.patientRut || ''));
+        setPacTelefono(budgetToEdit.patientPhone || '');
+        setFecha(budgetToEdit.createdAt || new Date().toISOString().split('T')[0]);
+        setObservaciones(budgetToEdit.notes || '');
+
+        const mappedItems: BudgetItemInput[] = (budgetToEdit.items || []).map((it, idx) => {
+          let pieza = '';
+          let nombre = it.description;
+          const match = it.description.match(/^\[(.*?)\]\s*(.*)$/);
+          if (match) {
+            pieza = match[1];
+            nombre = match[2];
+          } else if (it.toothNumber) {
+            pieza = `Pieza ${it.toothNumber}`;
+          }
+          return {
+            id: it.id || `item-edit-${idx}-${Date.now()}`,
+            pieza,
+            nombre,
+            cant: it.quantity || 1,
+            precio: it.unitPrice || it.patientCopay || 0
+          };
+        });
+
+        setItems(mappedItems.length > 0 ? mappedItems : [
+          {
+            id: `item-${Date.now()}`,
+            pieza: '',
+            nombre: '',
+            cant: 1,
+            precio: 0
+          }
+        ]);
+      } else {
+        setDoctorNombre('Dr. Alejandro David');
+        setDoctorEsp('Implantología & Cirugía Oral');
+
+        if (defaultPatient) {
+          setSelectedPatientId(defaultPatient.id);
+          setPacNombre(`${defaultPatient.firstName} ${defaultPatient.lastName}`);
+          setPacRut(formatRut(defaultPatient.documentId));
+          setPacTelefono(defaultPatient.phone || defaultPatient.whatsapp || '');
+        } else {
+          setSelectedPatientId('');
+          setPacNombre('');
+          setPacRut('');
+          setPacTelefono('');
         }
-      ]);
+
+        setFecha(new Date().toISOString().split('T')[0]);
+        setObservaciones('');
+
+        if (initialItem) {
+          setItems([
+            {
+              id: `item-${Date.now()}`,
+              pieza: initialItem.toothNumber ? `Pieza ${initialItem.toothNumber}` : '',
+              nombre: initialItem.name || '',
+              cant: 1,
+              precio: initialItem.price || 0
+            }
+          ]);
+        } else {
+          setItems([
+            {
+              id: `item-${Date.now()}`,
+              pieza: '',
+              nombre: '',
+              cant: 1,
+              precio: 0
+            }
+          ]);
+        }
+      }
     }
-  }, [isOpen]);
+  }, [isOpen, budgetToEdit, defaultPatient, initialItem, doctors]);
 
   // Add Treatment Row
   const handleAddItem = () => {
@@ -277,19 +349,21 @@ export const BudgetBuilderModal: React.FC<BudgetBuilderModalProps> = ({
       ctx.drawImage(logoImg, w - logoW - 40, 30, logoW, logoH);
     }
 
-    // Top-left header
+    // Top-left header from clinic settings
     ctx.textAlign = "left";
     ctx.fillStyle = "#1B2A3D";
     ctx.font = "bold 20px Georgia, serif";
-    ctx.fillText("Consulta dental Daaron", 50, 60);
+    ctx.fillText(clinicSettings.name || "Consulta dental Daaron", 50, 60);
 
     ctx.fillStyle = "#7A7568";
-    ctx.font = "14px sans-serif";
-    ctx.fillText("Maipú 461 edificio Salman local", 50, 82);
-    ctx.fillText("304 piso 3 Linares", 50, 100);
+    ctx.font = "13px sans-serif";
+    const addressLine1 = clinicSettings.address || "Maipú 461 edificio Salman local";
+    const addressLine2 = clinicSettings.city ? `${clinicSettings.city}${clinicSettings.phone ? ` • Tel: ${clinicSettings.phone}` : ''}` : "304 piso 3 Linares";
+    ctx.fillText(addressLine1, 50, 82);
+    ctx.fillText(addressLine2, 50, 100);
 
-    const docName = doctorNombre || 'Dr(a). Nombre Apellido';
-    const docEspecialidad = doctorEsp || 'Especialidad';
+    const docName = doctorNombre || 'Dr. Alejandro David';
+    const docEspecialidad = doctorEsp || (docName.includes('Alejandro') ? 'Implantología & Cirugía Oral' : 'Cirujano Dentista');
 
     ctx.fillStyle = "#1B2A3D";
     ctx.font = "bold 21px Georgia, serif";
@@ -309,8 +383,8 @@ export const BudgetBuilderModal: React.FC<BudgetBuilderModalProps> = ({
 
     // Patient
     const nombre = pacNombre || '—';
-    const edad = pacEdad;
     const rut = pacRut || '—';
+    const telefono = pacTelefono || '—';
     const fechaFmt = formatFecha(fecha);
 
     ctx.textAlign = "left";
@@ -318,29 +392,37 @@ export const BudgetBuilderModal: React.FC<BudgetBuilderModalProps> = ({
     ctx.font = "bold 12px sans-serif";
     ctx.fillText("PACIENTE", 50, 215);
     ctx.fillStyle = "#1B2A3D";
-    ctx.font = "bold 16px sans-serif";
-    ctx.fillText(nombre + (edad ? ` (${edad})` : ''), 50, 237);
+    ctx.font = "bold 15px sans-serif";
+    ctx.fillText(nombre, 50, 237);
 
     ctx.fillStyle = "#7A7568";
     ctx.font = "bold 12px sans-serif";
-    ctx.fillText("RUT", 450, 215);
+    ctx.fillText("RUT", 320, 215);
     ctx.fillStyle = "#1B2A3D";
-    ctx.font = "bold 16px sans-serif";
-    ctx.fillText(rut, 450, 237);
+    ctx.font = "bold 15px sans-serif";
+    ctx.fillText(rut, 320, 237);
 
     ctx.fillStyle = "#7A7568";
     ctx.font = "bold 12px sans-serif";
-    ctx.fillText("FECHA", 620, 215);
+    ctx.fillText("TELÉFONO", 470, 215);
     ctx.fillStyle = "#1B2A3D";
-    ctx.font = "bold 16px sans-serif";
-    ctx.fillText(fechaFmt, 620, 237);
+    ctx.font = "bold 15px sans-serif";
+    ctx.fillText(telefono, 470, 237);
+
+    ctx.fillStyle = "#7A7568";
+    ctx.font = "bold 12px sans-serif";
+    ctx.fillText("FECHA", 640, 215);
+    ctx.fillStyle = "#1B2A3D";
+    ctx.font = "bold 15px sans-serif";
+    ctx.fillText(fechaFmt, 640, 237);
 
     ctx.strokeStyle = "#D8D2C4";
     ctx.lineWidth = 1;
     ctx.beginPath();
-    ctx.moveTo(50, 245); ctx.lineTo(420, 245);
-    ctx.moveTo(450, 245); ctx.lineTo(600, 245);
-    ctx.moveTo(620, 245); ctx.lineTo(w - 50, 245);
+    ctx.moveTo(50, 245); ctx.lineTo(300, 245);
+    ctx.moveTo(320, 245); ctx.lineTo(450, 245);
+    ctx.moveTo(470, 245); ctx.lineTo(620, 245);
+    ctx.moveTo(640, 245); ctx.lineTo(w - 50, 245);
     ctx.stroke();
 
     // Title
@@ -472,8 +554,8 @@ export const BudgetBuilderModal: React.FC<BudgetBuilderModalProps> = ({
     ctx.font = "bold 12px sans-serif";
     ctx.fillText("HORARIO DE ATENCIÓN:", 50, h - 65);
     ctx.font = "13px sans-serif";
-    ctx.fillText("Lunes a viernes 10:00 a 13:00 hrs. / 15:00 a 19:00 hrs. — Sábado 10:00 a 13:00 hrs.", 50, h - 45);
-  }, [doctorNombre, doctorEsp, pacNombre, pacEdad, pacRut, fecha, items, observaciones]);
+    ctx.fillText(clinicSettings.hours || "Lunes a viernes 10:00 a 13:00 hrs. / 15:00 a 19:00 hrs. — Sábado 10:00 a 13:00 hrs.", 50, h - 45);
+  }, [clinicSettings, doctorNombre, doctorEsp, pacNombre, pacTelefono, pacRut, fecha, items, observaciones]);
 
   // Re-render canvas whenever input states change
   useEffect(() => {
@@ -532,11 +614,32 @@ export const BudgetBuilderModal: React.FC<BudgetBuilderModalProps> = ({
       };
     });
 
+    if (budgetToEdit) {
+      return {
+        ...budgetToEdit,
+        patientId: targetPatient.id,
+        patientName: pacNombre || `${targetPatient.firstName} ${targetPatient.lastName}`,
+        patientPhone: pacTelefono || targetPatient.phone || targetPatient.whatsapp || '',
+        patientRut: pacRut || targetPatient.documentId || '',
+        doctorId: targetDoctor.id,
+        doctorName: doctorNombre || targetDoctor.name,
+        branchId: budgetToEdit.branchId || branches[0]?.id || 'branch-1',
+        createdAt: fecha || budgetToEdit.createdAt,
+        items: budgetItems,
+        subtotal: calculatedSubtotal,
+        totalPatient: calculatedSubtotal,
+        balanceDue: Math.max(0, calculatedSubtotal - (budgetToEdit.totalPaid || 0)),
+        notes: observaciones
+      };
+    }
+
     return {
       id: `bud-${Date.now()}`,
       budgetNumber: `PRE-${Math.floor(1000 + Math.random() * 9000)}`,
       patientId: targetPatient.id,
       patientName: pacNombre || `${targetPatient.firstName} ${targetPatient.lastName}`,
+      patientPhone: pacTelefono || targetPatient.phone || targetPatient.whatsapp || '',
+      patientRut: pacRut || targetPatient.documentId || '',
       doctorId: targetDoctor.id,
       doctorName: doctorNombre || targetDoctor.name,
       branchId: branches[0]?.id || 'branch-1',
@@ -584,34 +687,32 @@ export const BudgetBuilderModal: React.FC<BudgetBuilderModalProps> = ({
     onClose();
   };
 
-  // Share via WhatsApp
-  const handleSendWhatsApp = () => {
+  const [isSharingWa, setIsSharingWa] = useState(false);
+  const [waToast, setWaToast] = useState<string | null>(null);
+
+  // Share via WhatsApp (Official PDF document, no written text body)
+  const handleSendWhatsApp = async () => {
     const budget = buildBudgetData();
+    if (budget.items.length === 0) {
+      alert('Por favor ingresa al menos un tratamiento con precio.');
+      return;
+    }
     const targetPatient = patients.find(p => p.id === selectedPatientId) || defaultPatient;
-    const phone = targetPatient?.whatsapp || targetPatient?.phone || '';
-    const cleanPhone = phone.replace(/[^0-9]/g, '');
+    const targetDoctor = doctors.find(d => d.name === doctorNombre) || doctors[0];
+    const settings = ClinicalDatabase.getClinicSettings();
 
-    const itemsList = budget.items
-      .map(i => `• ${i.description} (${i.quantity}x) - $${i.patientCopay.toLocaleString('es-CL')}`)
-      .join('\n');
-
-    const message = `🦷 *PRESUPUESTO ODONTOLÓGICO — DAARON CONSULTA DENTAL*\n\n` +
-      `Estimado(a) *${budget.patientName}*,\n` +
-      `Le compartimos el presupuesto para su plan de tratamiento:\n\n` +
-      `📋 *N° Presupuesto:* ${budget.budgetNumber}\n` +
-      `👨‍⚕️ *Profesional:* ${budget.doctorName}\n` +
-      `📅 *Fecha:* ${formatFecha(budget.createdAt)}\n\n` +
-      `📝 *Tratamientos Presupuestados:*\n${itemsList}\n\n` +
-      `💰 *TOTAL ESTIMADO:* $${budget.totalPatient.toLocaleString('es-CL')}\n\n` +
-      (budget.notes ? `📌 *Observaciones / Condiciones:* ${budget.notes}\n\n` : '') +
-      `📍 *Ubicación:* Maipú 461 edificio Salman local 304 piso 3 Linares\n` +
-      `Quedamos a su disposición para resolver dudas o agendar sus horas clínicas.`;
-
-    const url = cleanPhone
-      ? `https://api.whatsapp.com/send?phone=${cleanPhone}&text=${encodeURIComponent(message)}`
-      : `https://api.whatsapp.com/send?text=${encodeURIComponent(message)}`;
-
-    window.open(url, '_blank');
+    try {
+      setIsSharingWa(true);
+      const res = await shareBudgetViaWhatsAppPdf(budget, targetPatient, targetDoctor, settings);
+      if (res.message) {
+        setWaToast(res.message);
+        setTimeout(() => setWaToast(null), 6500);
+      }
+    } catch (err) {
+      console.error('Error sharing budget PDF via WhatsApp:', err);
+    } finally {
+      setIsSharingWa(false);
+    }
   };
 
   return (
@@ -631,11 +732,18 @@ export const BudgetBuilderModal: React.FC<BudgetBuilderModalProps> = ({
               }}
             />
             <div>
-              <h1 className="font-bold text-base sm:text-lg text-[#1F4B44] leading-tight">
-                Generador de Presupuesto PDF — Daaron Consulta Dental
+              <h1 className="font-bold text-base sm:text-lg text-[#1F4B44] leading-tight flex items-center gap-2">
+                <span>{budgetToEdit ? `Editar Presupuesto ${budgetToEdit.budgetNumber}` : 'Generador de Presupuesto PDF — Daaron Consulta Dental'}</span>
+                {budgetToEdit && (
+                  <span className="text-[11px] font-sans font-semibold bg-amber-100 text-amber-800 border border-amber-300 px-2.5 py-0.5 rounded-full">
+                    Modo Edición
+                  </span>
+                )}
               </h1>
               <p className="text-xs text-[#7A7568] mt-0.5">
-                Genera presupuestos dentales en formato Carta Vertical y descárgalos en PDF.
+                {budgetToEdit 
+                  ? 'Modifica los tratamientos, cantidades, precios unitarios u observaciones del presupuesto.'
+                  : 'Genera presupuestos dentales en formato Carta Vertical y descárgalos en PDF.'}
               </p>
             </div>
           </div>
@@ -669,9 +777,9 @@ export const BudgetBuilderModal: React.FC<BudgetBuilderModalProps> = ({
                       const val = e.target.value;
                       setDoctorNombre(val);
                       if (val === 'Dr. Alejandro David') {
-                        setDoctorEsp('Odontólogo general');
-                      } else if (val === 'Dr. Jorge Deluque') {
-                        setDoctorEsp('Ortodoncista');
+                        setDoctorEsp('Implantología & Cirugía Oral');
+                      } else if (val === 'Dr. Jorge de Luque' || val === 'Dr. Jorge Deluque') {
+                        setDoctorEsp('Rehabilitación Oral & Estética');
                       } else {
                         const found = doctors.find(d => d.name === val);
                         if (found) setDoctorEsp(found.specialty);
@@ -679,11 +787,10 @@ export const BudgetBuilderModal: React.FC<BudgetBuilderModalProps> = ({
                       }
                     }}
                   >
-                    <option value="">Seleccionar profesional</option>
-                    <option value="Dr. Alejandro David">Dr. Alejandro David</option>
-                    <option value="Dr. Jorge Deluque">Dr. Jorge Deluque</option>
+                    <option value="Dr. Alejandro David">Dr. Alejandro David (Predeterminado)</option>
+                    <option value="Dr. Jorge de Luque">Dr. Jorge de Luque</option>
                     {doctors
-                      .filter(d => d.name !== 'Dr. Alejandro David' && d.name !== 'Dr. Jorge Deluque')
+                      .filter(d => d.name !== 'Dr. Alejandro David' && d.name !== 'Dr. Jorge de Luque' && d.name !== 'Dr. Jorge Deluque')
                       .map(d => (
                         <option key={d.id} value={d.name}>{d.name}</option>
                       ))}
@@ -755,13 +862,13 @@ export const BudgetBuilderModal: React.FC<BudgetBuilderModalProps> = ({
                     />
                   </div>
                   <div className="field">
-                    <label htmlFor="pacEdad">Edad</label>
+                    <label htmlFor="pacTelefono">Teléfono / WhatsApp</label>
                     <input 
                       type="text" 
-                      id="pacEdad" 
-                      placeholder="Opcional"
-                      value={pacEdad}
-                      onChange={(e) => setPacEdad(e.target.value)}
+                      id="pacTelefono" 
+                      placeholder="+56 9 1234 5678"
+                      value={pacTelefono}
+                      onChange={(e) => setPacTelefono(e.target.value)}
                     />
                   </div>
                 </div>
@@ -934,20 +1041,28 @@ export const BudgetBuilderModal: React.FC<BudgetBuilderModalProps> = ({
                       title="Guarda el presupuesto en la ficha del paciente para seguimiento y cobro"
                     >
                       <Save className="w-4 h-4" />
-                      <span>Guardar en Ficha</span>
+                      <span>{budgetToEdit ? 'Actualizar en Ficha' : 'Guardar en Ficha'}</span>
                     </button>
 
                     <button
                       type="button"
                       onClick={handleSendWhatsApp}
-                      className="px-3 py-2.5 rounded-md bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold flex items-center justify-center gap-1.5 transition-all shadow-sm cursor-pointer"
-                      title="Enviar resumen del presupuesto por WhatsApp"
+                      disabled={isSharingWa}
+                      className="px-3 py-2.5 rounded-md bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-xs font-bold flex items-center justify-center gap-1.5 transition-all shadow-sm cursor-pointer"
+                      title="Enviar documento PDF oficial del presupuesto por WhatsApp"
                     >
                       <MessageSquare className="w-4 h-4" />
-                      <span>WhatsApp</span>
+                      <span>{isSharingWa ? 'Preparando...' : 'WhatsApp (PDF)'}</span>
                     </button>
                   </div>
                 </div>
+
+                {waToast && (
+                  <div className="p-3 bg-emerald-900 text-emerald-100 rounded-lg text-xs flex items-center justify-between gap-2 shadow animate-in fade-in">
+                    <span>{waToast}</span>
+                    <button type="button" onClick={() => setWaToast(null)} className="text-emerald-300 font-bold">×</button>
+                  </div>
+                )}
 
               </div>
             </div>
